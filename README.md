@@ -23,7 +23,7 @@ Use the link above, or download `index.html` and open it in any browser.
 | Resolution | 96–300 dpi. Map detail stays the same, only sharpness changes |
 | Orientation | Auto picks whichever way gives the zone more room |
 | Zone fills | Percentage of the page taken by the zone's longest side |
-| Base map | Carto streets, Carto light grey, OpenStreetMap, Esri satellite, or none |
+| Base map | OpenStreetMap, Esri streets, Esri light grey, Esri satellite, or none. None need an API key |
 | Street label size | Uses a lower map zoom so street names print larger |
 | Zone style | Outline colour and width, tint, fade outside the zone, KML colours |
 | Extras | Neighbouring zones in grey, zone name and page number, scale bar |

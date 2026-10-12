@@ -244,9 +244,9 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
           <div class="field">
             <label for="basemap">Base map</label>
             <select id="basemap">
-              <option value="voyager" selected>Streets (Carto)</option>
-              <option value="light">Light grey (Carto)</option>
-              <option value="osm">OpenStreetMap</option>
+              <option value="osm" selected>OpenStreetMap</option>
+              <option value="streets">Streets (Esri)</option>
+              <option value="light">Light grey (Esri)</option>
               <option value="imagery">Satellite (Esri)</option>
               <option value="none">None (outline only)</option>
             </select>
@@ -340,9 +340,9 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
 /* ================= constants ================= */
 const PAGES = { A5: [148, 210], A4: [210, 297], A3: [297, 420], A2: [420, 594], Letter: [215.9, 279.4], Legal: [215.9, 355.6] };
 const BASEMAPS = {
-  voyager: { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png", sub: "abcd", max: 20, attr: "© OpenStreetMap contributors © CARTO" },
-  light:   { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", sub: "abcd", max: 20, attr: "© OpenStreetMap contributors © CARTO" },
   osm:     { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", sub: "", max: 19, attr: "© OpenStreetMap contributors" },
+  streets: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", sub: "", max: 19, attr: "Map © Esri, HERE, Garmin, OpenStreetMap contributors" },
+  light:   { url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", sub: "", max: 16, attr: "Map © Esri, HERE, Garmin, OpenStreetMap contributors" },
   imagery: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", sub: "", max: 19, attr: "Imagery © Esri, Maxar, Earthstar Geographics" },
   none:    { url: null, sub: "", max: 22, attr: "" }
 };
@@ -509,6 +509,7 @@ function loadSettings() {
       const el = $("#" + id);
       if (el.type === "checkbox") el.checked = !!o[id]; else el.value = o[id];
     }
+    if (!BASEMAPS[$("#basemap").value]) $("#basemap").value = "osm"; // saved setting from a removed map source
     $("#fill").value = $("#fillNum").value;
     const r = document.querySelector(`input[name="orient"][value="${o.orient}"]`); if (r) r.checked = true;
   } catch (e) { /* ignore */ }
