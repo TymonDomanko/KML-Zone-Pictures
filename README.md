@@ -2,11 +2,13 @@
 
 Open a KML or KMZ file of zones and get one map page per zone, with each zone centred and sized to fill a set percentage of the page. Export everything as a single PDF or as a zip of PNGs.
 
+**Open the tool: https://tymondomanko.github.io/KML-Zone-Pictures/**
+
 Runs entirely in the browser. Nothing is uploaded anywhere.
 
 ## Use it
 
-Open `index.html` in a browser, or host it with GitHub Pages (Settings → Pages → Deploy from branch → `main` / root).
+Use the link above, or download `index.html` and open it in any browser.
 
 1. Click **Open KML or KMZ** (or drop the file on the page).
 2. Set the page size (A4 by default), orientation and how much of the page the zone should fill.
