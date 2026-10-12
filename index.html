@@ -291,6 +291,49 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
       </fieldset>
 
       <fieldset>
+        <legend>Summary page</legend>
+        <label class="check"><input type="checkbox" id="showSummary" checked>Start with a summary page of all zones</label>
+        <div id="summaryOpts" class="checks">
+          <div class="row">
+            <div class="field">
+              <label for="sumSize">Page size</label>
+              <select id="sumSize">
+                <option value="same">Same as zone pages</option>
+                <option value="A4">A4 · 210 × 297</option>
+                <option value="A3" selected>A3 · 297 × 420</option>
+                <option value="A2">A2 · 420 × 594</option>
+                <option value="A1">A1 · 594 × 841</option>
+                <option value="A0">A0 · 841 × 1189</option>
+                <option value="Letter">Letter · 216 × 279</option>
+                <option value="Legal">Legal · 216 × 356</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="sumOrient">Orientation</label>
+              <select id="sumOrient">
+                <option value="auto" selected>Auto</option>
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="sumFill">Zones fill (%)</label><input type="number" id="sumFill" min="20" max="100" step="1" value="90"></div>
+            <div class="field">
+              <label for="sumLabel">Name size</label>
+              <select id="sumLabel">
+                <option value="0" selected>Fit each zone</option>
+                <option value="3">Small (3 mm)</option>
+                <option value="5">Medium (5 mm)</option>
+                <option value="8">Large (8 mm)</option>
+                <option value="12">Extra large (12 mm)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>Locator minimap</legend>
         <label class="check"><input type="checkbox" id="showInset">Add a zoomed-out minimap in a corner</label>
         <div id="insetOpts" class="checks">
@@ -403,7 +446,7 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
 "use strict";
 
 /* ================= constants ================= */
-const PAGES = { A5: [148, 210], A4: [210, 297], A3: [297, 420], A2: [420, 594], Letter: [215.9, 279.4], Legal: [215.9, 355.6] };
+const PAGES = { A5: [148, 210], A4: [210, 297], A3: [297, 420], A2: [420, 594], A1: [594, 841], A0: [841, 1189], Letter: [215.9, 279.4], Legal: [215.9, 355.6] };
 const BASEMAPS = {
   osm:     { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", sub: "", max: 19, attr: "© OpenStreetMap contributors" },
   streets: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", sub: "", max: 19, attr: "Map © Esri, HERE, Garmin, OpenStreetMap contributors" },
@@ -569,13 +612,18 @@ function readOpts() {
     insetZoom: clamp(num($("#insetZoom"), 8), 1.5, 1000),
     insetSize: clamp(num($("#insetSize"), 30), 10, 60),
     insetFrame: $("#insetFrame").checked,
+    showSummary: $("#showSummary").checked,
+    sumSize: $("#sumSize").value,
+    sumOrient: $("#sumOrient").value,
+    sumFill: clamp(num($("#sumFill"), 90), 20, 100),
+    sumLabel: parseFloat($("#sumLabel").value) || 0,
     insetDetail: parseInt($("#insetDetail").value, 10) || 0,
     showTitle: $("#showTitle").checked,
     showScale: $("#showScale").checked,
     sortBy: $("#sortBy").value
   };
 }
-const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showTitle", "showScale", "sortBy"];
+const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showSummary", "sumSize", "sumOrient", "sumFill", "sumLabel", "showTitle", "showScale", "sortBy"];
 function saveSettings() {
   try {
     const o = { orient: document.querySelector('input[name="orient"]:checked').value };
@@ -870,6 +918,35 @@ async function drawInset(ctx, zone, L_, o) {
   return failed;
 }
 
+function drawFurniture(ctx, L, o) {
+  const mm = L.pxPerMM, m = 5 * mm;
+  if (o.showScale) {
+    const lat = unproject(0, (L.oy + L.pxH / 2) / L.s)[1];
+    const mpp = 40075016.686 * Math.cos(lat * Math.PI / 180) / (256 * L.s);
+    const meters = niceNumber(L.pxW * 0.2 * mpp), barPx = meters / mpp;
+    const label = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
+    const pad = 2 * mm, bx = m, bh = 9.5 * mm, by = L.pxH - m - bh;
+    ctx.font = `500 ${3.2 * mm}px "IBM Plex Sans", system-ui, sans-serif`;
+    const lwid = ctx.measureText(label).width;
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, barPx + pad * 3 + lwid, bh, mm) : ctx.rect(bx, by, barPx + pad * 3 + lwid, bh); ctx.fill();
+    const barY = by + bh / 2 - 0.9 * mm, barH = 1.8 * mm;
+    ctx.fillStyle = "#1a1f26"; ctx.fillRect(bx + pad, barY, barPx / 2, barH);
+    ctx.strokeStyle = "#1a1f26"; ctx.lineWidth = Math.max(1, 0.25 * mm);
+    ctx.strokeRect(bx + pad, barY, barPx, barH);
+    ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ctx.fillText(label, bx + pad * 2 + barPx, by + bh / 2);
+  }
+  const attr = BASEMAPS[o.basemap].attr;
+  if (attr) {
+    ctx.font = `400 ${2.1 * mm}px "IBM Plex Sans", system-ui, sans-serif`;
+    const tw = ctx.measureText(attr).width;
+    ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.fillRect(L.pxW - tw - 3 * mm, L.pxH - 4.2 * mm, tw + 3 * mm, 4.2 * mm);
+    ctx.fillStyle = "#3c424a"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ctx.fillText(attr, L.pxW - tw - 1.5 * mm, L.pxH - 2.1 * mm);
+  }
+}
+
 async function renderZone(zone, pos, total, o, dpi) {
   const L = layout(zone, o, dpi);
   const c = document.createElement("canvas");
@@ -935,31 +1012,114 @@ async function renderZone(zone, pos, total, o, dpi) {
     labelBox(ctx, zone.name, m, m, mm, { size: 4.6 });
     if (total) labelBox(ctx, `${pos} / ${total}`, L.pxW - m, m, mm, { size: 3.4, weight: 500, align: "right", color: "#5b646e" });
   }
-  if (o.showScale) {
-    const lat = unproject(0, (L.oy + L.pxH / 2) / L.s)[1];
-    const mpp = 40075016.686 * Math.cos(lat * Math.PI / 180) / (256 * L.s);
-    const meters = niceNumber(L.pxW * 0.2 * mpp), barPx = meters / mpp;
-    const label = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
-    const pad = 2 * mm, bx = m, bh = 9.5 * mm, by = L.pxH - m - bh;
-    ctx.font = `500 ${3.2 * mm}px "IBM Plex Sans", system-ui, sans-serif`;
-    const lwid = ctx.measureText(label).width;
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, barPx + pad * 3 + lwid, bh, mm) : ctx.rect(bx, by, barPx + pad * 3 + lwid, bh); ctx.fill();
-    const barY = by + bh / 2 - 0.9 * mm, barH = 1.8 * mm;
-    ctx.fillStyle = "#1a1f26"; ctx.fillRect(bx + pad, barY, barPx / 2, barH);
-    ctx.strokeStyle = "#1a1f26"; ctx.lineWidth = Math.max(1, 0.25 * mm);
-    ctx.strokeRect(bx + pad, barY, barPx, barH);
-    ctx.textBaseline = "middle"; ctx.textAlign = "left";
-    ctx.fillText(label, bx + pad * 2 + barPx, by + bh / 2);
+  drawFurniture(ctx, L, o);
+  return { canvas: c, L, failed };
+}
+
+/* ---------- summary page ---------- */
+const SUMMARY_ID = "__summary";
+function summaryOpts(o) {
+  const same = o.sumSize === "same";
+  return { ...o, size: same ? o.size : o.sumSize, page: same ? o.page : PAGES[o.sumSize], orient: o.sumOrient, fill: o.sumFill };
+}
+function pointInRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
   }
-  const attr = BASEMAPS[o.basemap].attr;
-  if (attr) {
-    ctx.font = `400 ${2.1 * mm}px "IBM Plex Sans", system-ui, sans-serif`;
-    const tw = ctx.measureText(attr).width;
-    ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.fillRect(L.pxW - tw - 3 * mm, L.pxH - 4.2 * mm, tw + 3 * mm, 4.2 * mm);
-    ctx.fillStyle = "#3c424a"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
-    ctx.fillText(attr, L.pxW - tw - 1.5 * mm, L.pxH - 2.1 * mm);
+  return inside;
+}
+// A point well inside the zone for its name: the centroid if it's inside, otherwise the middle
+// of the widest inside stretch on a few horizontal lines through the zone.
+function labelPoint(zone) {
+  let best = null, bestArea = -1;
+  for (const rings of zone.proj) {
+    const r = rings[0]; let a = 0;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] * r[i][1] - r[i][0] * r[j][1]);
+    if (Math.abs(a) > bestArea) { bestArea = Math.abs(a); best = rings; }
   }
+  const inZone = (x, y) => pointInRing(x, y, best[0]) && !best.slice(1).some((h) => pointInRing(x, y, h));
+  const outer = best[0];
+  let cx = 0, cy = 0, A = 0;
+  for (let i = 0, j = outer.length - 1; i < outer.length; j = i++) {
+    const f = outer[j][0] * outer[i][1] - outer[i][0] * outer[j][1];
+    A += f; cx += (outer[j][0] + outer[i][0]) * f; cy += (outer[j][1] + outer[i][1]) * f;
+  }
+  if (Math.abs(A) > 1e-18) { cx /= 3 * A; cy /= 3 * A; if (inZone(cx, cy)) return [cx, cy]; }
+  let minY = Infinity, maxY = -Infinity;
+  for (const [, y] of outer) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+  let pick = null, pickW = -1;
+  for (let k = 1; k <= 9; k++) {
+    const y = minY + (maxY - minY) * k / 10, xs = [];
+    for (const ring of best) for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y)) xs.push((xj - xi) * (y - yi) / (yj - yi) + xi);
+    }
+    xs.sort((a, b) => a - b);
+    for (let i = 0; i + 1 < xs.length; i += 2) if (xs[i + 1] - xs[i] > pickW) { pickW = xs[i + 1] - xs[i]; pick = [(xs[i] + xs[i + 1]) / 2, y]; }
+  }
+  return pick || [(zone.bb.minX + zone.bb.maxX) / 2, (zone.bb.minY + zone.bb.maxY) / 2];
+}
+const summaryDpi = (o, dpi) => Math.min(dpi, 10000 / (Math.max(...summaryOpts(o).page) / 25.4));
+async function renderSummary(list, o0, dpi) {
+  const o = summaryOpts(o0);
+  dpi = summaryDpi(o0, dpi); // browsers can't hold huge single images
+  const bb = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const z of list) {
+    bb.minX = Math.min(bb.minX, z.bb.minX); bb.minY = Math.min(bb.minY, z.bb.minY);
+    bb.maxX = Math.max(bb.maxX, z.bb.maxX); bb.maxY = Math.max(bb.maxY, z.bb.maxY);
+  }
+  const L = layout({ bb }, o, dpi);
+  const c = document.createElement("canvas"); c.width = L.pxW; c.height = L.pxH;
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.fillStyle = o.basemap === "none" ? "#ffffff" : "#eceeea"; ctx.fillRect(0, 0, L.pxW, L.pxH);
+  const failed = await drawBase(ctx, L, o);
+  const mm = L.pxPerMM, lw = o.lineMM * mm;
+
+  if (o.fade > 0) {
+    ctx.beginPath(); ctx.rect(0, 0, L.pxW, L.pxH);
+    for (const z of list) tracePath(ctx, z, L);
+    ctx.fillStyle = `rgba(255,255,255,${o.fade})`; ctx.fill("evenodd");
+  }
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  for (const z of list) {
+    const col = zoneColor(z, o);
+    ctx.beginPath(); tracePath(ctx, z, L);
+    if (o.fillOpacity > 0) { ctx.fillStyle = hexToRgba(col, o.fillOpacity); ctx.fill("evenodd"); }
+  }
+  for (const z of list) {
+    if (o.lineOpacity <= 0) break;
+    const col = zoneColor(z, o);
+    ctx.beginPath(); tracePath(ctx, z, L);
+    ctx.strokeStyle = `rgba(255,255,255,${0.85 * o.lineOpacity})`; ctx.lineWidth = lw + 0.8 * mm; ctx.stroke();
+    ctx.strokeStyle = hexToRgba(col, o.lineOpacity); ctx.lineWidth = lw; ctx.stroke();
+  }
+
+  // zone names centred on each zone
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const z of list) {
+    const [px, py] = labelPoint(z);
+    const x = px * L.s - L.ox, y = py * L.s - L.oy;
+    const zw = (z.bb.maxX - z.bb.minX) * L.s, zh = (z.bb.maxY - z.bb.minY) * L.s;
+    let size;
+    if (o.sumLabel > 0) size = o.sumLabel * mm;
+    else {
+      ctx.font = `700 100px "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif`;
+      const w100 = ctx.measureText(z.name).width || 100;
+      size = clamp(Math.min(zw * 0.8 / w100 * 100, zh * 0.4), 2.2 * mm, 12 * mm);
+    }
+    ctx.font = `700 ${size}px "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif`;
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(2, size * 0.22); ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.strokeText(z.name, x, y);
+    ctx.fillStyle = "#1a1f26"; ctx.fillText(z.name, x, y);
+  }
+  ctx.textAlign = "left";
+
+  if (o.showTitle) labelBox(ctx, `${sourceName === "sample" ? "Sample zones" : baseName()} · ${list.length} zone${list.length === 1 ? "" : "s"}`, 5 * mm, 5 * mm, mm, { size: 5.2 });
+  drawFurniture(ctx, L, o);
   return { canvas: c, L, failed };
 }
 
@@ -1014,6 +1174,16 @@ function renderList() {
   ul.innerHTML = "";
   const list = orderedZones(o);
   if (!list.length) { ul.innerHTML = '<li class="empty">No polygon zones found in this file.</li>'; }
+  if (list.length && o.showSummary) {
+    const li = document.createElement("li");
+    li.className = selectedId === SUMMARY_ID ? "sel" : "";
+    const spacer = document.createElement("span");
+    const idx = document.createElement("span"); idx.className = "idx"; idx.textContent = "00";
+    const nm = document.createElement("span"); nm.className = "zn"; nm.textContent = "Summary page (all zones)";
+    li.append(spacer, idx, nm);
+    li.addEventListener("click", () => selectZone(SUMMARY_ID, true));
+    ul.append(li);
+  }
   let n = 0;
   for (const z of list) {
     const li = document.createElement("li");
@@ -1038,7 +1208,8 @@ function selectZone(id, zoom) {
   selectedId = id;
   renderList(); drawZonesOnMap();
   const p = polyById[id];
-  if (zoom && p) map.fitBounds(p.getBounds(), { padding: [60, 60], maxZoom: 18 });
+  if (zoom && id === SUMMARY_ID) fitAll();
+  else if (zoom && p) map.fitBounds(p.getBounds(), { padding: [60, 60], maxZoom: 18 });
   schedulePreview();
 }
 
@@ -1054,6 +1225,26 @@ async function renderPreview() {
   const o = readOpts();
   const zone = zones.find((z) => z.id === selectedId);
   const canvas = $("#proofCanvas");
+  if (selectedId === SUMMARY_ID && o.showSummary) {
+    const inc = orderedZones(o).filter((z) => z.include);
+    if (!inc.length) { $("#proofTitle").textContent = "Summary page"; $("#spec").textContent = "Select at least one zone."; drawFrame(null); return; }
+    const so = summaryOpts(o);
+    const token = ++previewToken;
+    $("#proofTitle").textContent = "Summary page";
+    $("#proofBusy").hidden = false;
+    const r = await renderSummary(inc, o, 1100 / (Math.max(...so.page) / 25.4));
+    if (token !== previewToken) return;
+    $("#proofBusy").hidden = true;
+    canvas.width = r.canvas.width; canvas.height = r.canvas.height;
+    canvas.getContext("2d").drawImage(r.canvas, 0, 0);
+    drawFrame(r.L);
+    $("#spec").innerHTML =
+      `<b>${so.sumSize === "same" ? so.size : so.sumSize}</b> · ${fmt(r.L.w)} × ${fmt(r.L.h)} mm · ${r.L.orient}<br>` +
+      `${inc.length} zones fill <b>${so.fill}%</b><br>` +
+      `Output ${Math.round(r.L.w / 25.4 * summaryDpi(o, o.dpi))} × ${Math.round(r.L.h / 25.4 * summaryDpi(o, o.dpi))} px at ${Math.round(summaryDpi(o, o.dpi))} dpi` +
+      (r.failed ? `<br><span style="color:var(--danger)">${r.failed} map tiles didn't load</span>` : "");
+    return;
+  }
   if (!zone) {
     $("#proofTitle").textContent = "No zone selected"; $("#spec").textContent = "Pick a zone from the list or the map.";
     drawFrame(null); lastPreview = null; return;
@@ -1103,9 +1294,12 @@ async function exportAll(kind) {
   let failed = 0;
   try {
     let pdf = null; const zip = kind === "png" ? new JSZip() : null;
-    for (let i = 0; i < list.length; i++) {
-      setProgress(i / list.length, `Rendering page ${i + 1} of ${list.length}: ${list[i].name}`);
-      const r = await renderZone(list[i], i + 1, list.length, o, o.dpi);
+    const jobs = (o.showSummary ? [null] : []).concat(list); // null = summary page
+    for (let j = 0; j < jobs.length; j++) {
+      const z = jobs[j];
+      const i = o.showSummary ? j - 1 : j;
+      setProgress(j / jobs.length, z ? `Rendering page ${i + 1} of ${list.length}: ${z.name}` : "Rendering summary page…");
+      const r = z ? await renderZone(z, i + 1, list.length, o, o.dpi) : await renderSummary(list, o, o.dpi);
       failed += r.failed;
       if (kind === "pdf") {
         const W = r.L.w, H = r.L.h, orient = W > H ? "l" : "p";
@@ -1114,7 +1308,7 @@ async function exportAll(kind) {
         pdf.addImage(r.canvas.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, W, H, undefined, "FAST");
       } else {
         const blob = await canvasBlob(r.canvas, "image/png");
-        zip.file(`${String(i + 1).padStart(2, "0")} - ${safeName(list[i].name)}.png`, blob);
+        zip.file(z ? `${String(i + 1).padStart(2, "0")} - ${safeName(z.name)}.png` : "00 - Summary.png", blob);
       }
       await sleep(0);
     }
@@ -1125,7 +1319,7 @@ async function exportAll(kind) {
     } else {
       saveBlob(await zip.generateAsync({ type: "blob" }), `${baseName()} zones.zip`);
     }
-    setProgress(1, `Exported ${list.length} page${list.length === 1 ? "" : "s"}.`);
+    setProgress(1, `Exported ${list.length} zone page${list.length === 1 ? "" : "s"}${o.showSummary ? " plus the summary page" : ""}.`);
     if (failed) toast(`${failed} map tiles didn't load, so parts of some pages are blank grey. Check your connection and export again.`, true);
   } catch (e) {
     console.error(e);
@@ -1137,6 +1331,16 @@ async function exportAll(kind) {
 }
 async function savePagePng() {
   const o = readOpts();
+  if (selectedId === SUMMARY_ID && o.showSummary) {
+    const inc = orderedZones(o).filter((z) => z.include);
+    if (!inc.length) return;
+    setProgress(0.5, "Rendering summary page…");
+    const r = await renderSummary(inc, o, o.dpi);
+    saveBlob(await canvasBlob(r.canvas, "image/png"), "Summary.png");
+    setProgress(1, "Saved the summary page.");
+    if (r.failed) toast(`${r.failed} map tiles didn't load on this page.`, true);
+    return;
+  }
   const zone = zones.find((z) => z.id === selectedId);
   if (!zone) return;
   const { pos, total } = pagePosition(zone, o);
@@ -1189,7 +1393,13 @@ for (const el of document.querySelectorAll(".panel input, .panel select")) {
   if (el.id === "fileInput" || el.id === "fill" || el.id === "fillNum" || el.id.startsWith("inc_")) continue;
   el.addEventListener(el.type === "number" ? "input" : "change", onOpt);
 }
-function syncSections() { $("#otherOpts").hidden = !$("#showOthers").checked; $("#insetOpts").hidden = !$("#showInset").checked; }
+function syncSections() {
+  $("#otherOpts").hidden = !$("#showOthers").checked;
+  $("#insetOpts").hidden = !$("#showInset").checked;
+  $("#summaryOpts").hidden = !$("#showSummary").checked;
+  if (!$("#showSummary").checked && selectedId === SUMMARY_ID) { const f = orderedZones()[0]; selectedId = f ? f.id : null; }
+  renderList();
+}
 function onOpt() { syncSections(); saveSettings(); drawZonesOnMap(); schedulePreview(); }
 syncSections();
 $("#allOn").addEventListener("click", () => { zones.forEach((z) => (z.include = true)); renderList(); drawZonesOnMap(); schedulePreview(); });
