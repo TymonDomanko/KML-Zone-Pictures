@@ -23,8 +23,8 @@ Use the link above, or download `index.html` and open it in any browser.
 | Resolution | 96–300 dpi. Map detail stays the same, only sharpness changes |
 | Orientation | Auto picks whichever way gives the zone more room |
 | Zone fills | Percentage of the page taken by the zone's longest side |
-| Base map | OpenStreetMap, Esri streets, Esri light grey, Esri satellite, or none. None need an API key |
-| Street label size | Uses a lower map zoom so street names print larger |
+| Base map | Sharp vector maps from OpenFreeMap (streets, bright streets, light grey), or image tiles from OpenStreetMap and Esri (streets, light grey, satellite), or none. None need an API key |
+| Street label size | Prints street names larger or smaller. Vector maps stay sharp at every size; image tiles blur when enlarged |
 | Zone style | Outline colour, width and opacity, fill opacity, fade outside the zone, KML colours |
 | Neighbouring zones | On or off, with their own colour (or KML colours), outline width and opacity, fill opacity, dashed or solid, names on or off |
 | Extras | Zone name and page number, scale bar |

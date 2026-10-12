@@ -244,10 +244,17 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
           <div class="field">
             <label for="basemap">Base map</label>
             <select id="basemap">
-              <option value="osm" selected>OpenStreetMap</option>
-              <option value="streets">Streets (Esri)</option>
-              <option value="light">Light grey (Esri)</option>
-              <option value="imagery">Satellite (Esri)</option>
+              <optgroup label="Sharp at any label size">
+                <option value="vliberty" selected>Streets</option>
+                <option value="vbright">Bright streets</option>
+                <option value="vpositron">Light grey</option>
+              </optgroup>
+              <optgroup label="Image tiles (blur at large labels)">
+                <option value="osm">OpenStreetMap</option>
+                <option value="streets">Streets (Esri)</option>
+                <option value="light">Light grey (Esri)</option>
+                <option value="imagery">Satellite (Esri)</option>
+              </optgroup>
               <option value="none">None (outline only)</option>
             </select>
           </div>
@@ -352,6 +359,7 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
@@ -364,6 +372,10 @@ const BASEMAPS = {
   streets: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", sub: "", max: 19, attr: "Map © Esri, HERE, Garmin, OpenStreetMap contributors" },
   light:   { url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", sub: "", max: 16, attr: "Map © Esri, HERE, Garmin, OpenStreetMap contributors" },
   imagery: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", sub: "", max: 19, attr: "Imagery © Esri, Maxar, Earthstar Geographics" },
+  // Vector maps: drawn fresh at the page's size, so text stays sharp at any label size or dpi.
+  vliberty:  { vector: "https://tiles.openfreemap.org/styles/liberty", max: 22, attr: "OpenFreeMap © OpenMapTiles · Data © OpenStreetMap contributors" },
+  vbright:   { vector: "https://tiles.openfreemap.org/styles/bright", max: 22, attr: "OpenFreeMap © OpenMapTiles · Data © OpenStreetMap contributors" },
+  vpositron: { vector: "https://tiles.openfreemap.org/styles/positron", max: 22, attr: "OpenFreeMap © OpenMapTiles · Data © OpenStreetMap contributors" },
   none:    { url: null, sub: "", max: 22, attr: "" }
 };
 const STORE_KEY = "kmlZonePictures.v1";
@@ -619,6 +631,74 @@ async function drawTiles(ctx, L, bmKey) {
   return failed;
 }
 
+/* ================= vector maps (MapLibre, rendered off-screen) ================= */
+// Label size: Small 0.71×, Normal 1×, Large 1.41×, Extra large 2× the standard size on paper.
+const labelScale = (o) => 2 ** (-o.textShift / 2);
+let glMax = null;
+function maxGLSize() {
+  if (glMax) return glMax;
+  try {
+    const gl = document.createElement("canvas").getContext("webgl");
+    const dims = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+    glMax = Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), dims[0], dims[1], 8192);
+  } catch (e) { glMax = 4096; }
+  return glMax;
+}
+let vMap = null, vStyle = null, vDiv = null, vErrors = 0, vLock = Promise.resolve();
+function drawVector(ctx, L_, o) {
+  // one render at a time: the off-screen map is shared between the proof and exports
+  const job = vLock.then(() => renderVectorNow(ctx, L_, o));
+  vLock = job.catch(() => {});
+  return job;
+}
+async function renderVectorNow(ctx, L_, o) {
+  if (typeof maplibregl === "undefined") throw new Error("The map drawing library didn't load. Check your connection and reload the page.");
+  const bm = BASEMAPS[o.basemap];
+  // pixel ratio sets how big text prints; shrink it only if the page is larger than the graphics card allows
+  let pr = (L_.dpi / 96) * labelScale(o);
+  const cssW = Math.max(1, Math.round(L_.pxW / pr)), cssH = Math.max(1, Math.round(L_.pxH / pr));
+  const lim = maxGLSize();
+  let renderPr = pr;
+  if (cssW * renderPr > lim || cssH * renderPr > lim) renderPr = Math.min(lim / cssW, lim / cssH);
+  const zoom = Math.log2(L_.s / (2 * pr));
+  const [lng, lat] = unproject((L_.ox + L_.pxW / 2) / L_.s, (L_.oy + L_.pxH / 2) / L_.s);
+
+  if (!vDiv) {
+    vDiv = document.createElement("div");
+    vDiv.style.cssText = "position:fixed;left:-200000px;top:0;visibility:hidden;pointer-events:none;";
+    document.body.append(vDiv);
+  }
+  vDiv.style.width = cssW + "px"; vDiv.style.height = cssH + "px";
+  vErrors = 0;
+  if (!vMap || vStyle !== bm.vector) {
+    if (vMap) vMap.remove();
+    vStyle = bm.vector;
+    vMap = new maplibregl.Map({
+      container: vDiv, style: bm.vector, center: [lng, lat], zoom, interactive: false,
+      attributionControl: false, pixelRatio: renderPr, preserveDrawingBuffer: true, fadeDuration: 0,
+      maxCanvasSize: [lim, lim], maxZoom: 24, renderWorldCopies: true
+    });
+    vMap.on("error", () => { vErrors++; });
+    await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error("The map style took too long to load. Check your connection.")), 30000);
+      vMap.once("load", () => { clearTimeout(t); res(); });
+    });
+  } else {
+    vMap.setPixelRatio(renderPr);
+    vMap.resize();
+    vMap.jumpTo({ center: [lng, lat], zoom });
+  }
+  vMap.resize();
+  vMap.jumpTo({ center: [lng, lat], zoom });
+  await new Promise((res) => {
+    const t = setTimeout(res, 45000);
+    vMap.once("idle", () => { clearTimeout(t); res(); });
+    vMap.triggerRepaint();
+  });
+  ctx.drawImage(vMap.getCanvas(), 0, 0, L_.pxW, L_.pxH);
+  return vErrors;
+}
+
 /* ================= drawing the page ================= */
 function tracePath(ctx, zone, L) {
   for (const rings of zone.proj) for (const ring of rings) {
@@ -655,7 +735,7 @@ async function renderZone(zone, pos, total, o, dpi) {
   ctx.imageSmoothingQuality = "high";
   ctx.fillStyle = o.basemap === "none" ? "#ffffff" : "#eceeea";
   ctx.fillRect(0, 0, L.pxW, L.pxH);
-  const failed = await drawTiles(ctx, L, o.basemap);
+  const failed = BASEMAPS[o.basemap].vector ? await drawVector(ctx, L, o) : await drawTiles(ctx, L, o.basemap);
   const mm = L.pxPerMM, lw = o.lineMM * mm;
   const col = zoneColor(zone, o);
 
@@ -746,7 +826,11 @@ function setBaseLayer() {
   const o = readOpts(), bm = BASEMAPS[o.basemap];
   if (baseLayer) map.removeLayer(baseLayer);
   baseLayer = null;
-  if (bm.url) {
+  if (bm.vector) {
+    // the on-screen map uses OpenStreetMap tiles; the proof and exports use the chosen vector style
+    const osm = BASEMAPS.osm;
+    baseLayer = L.tileLayer(osm.url, { maxZoom: 19, attribution: osm.attr, crossOrigin: true }).addTo(map);
+  } else if (bm.url) {
     baseLayer = L.tileLayer(bm.url.replace("{s}", bm.sub ? "{s}" : "a"), { subdomains: bm.sub || "a", maxZoom: bm.max, attribution: bm.attr, crossOrigin: true }).addTo(map);
   }
 }
@@ -847,7 +931,7 @@ async function renderPreview() {
   const pxOut = layout(zone, o, o.dpi);
   $("#spec").innerHTML =
     `<b>${sizeName}</b> · ${fmt(L_.w)} × ${fmt(L_.h)} mm · ${L_.orient}<br>` +
-    `Zone fills <b>${o.fill}%</b> · map zoom ${L_.zt}<br>` +
+    `Zone fills <b>${o.fill}%</b> · map zoom ${BASEMAPS[o.basemap].vector ? fmt(Math.log2(L_.s / (2 * labelScale(o) * L_.dpi / 96))) : L_.zt}<br>` +
     `Output ${pxOut.pxW} × ${pxOut.pxH} px at ${o.dpi} dpi` +
     (r.failed ? `<br><span style="color:var(--danger)">${r.failed} map tiles didn't load</span>` : "");
 }
