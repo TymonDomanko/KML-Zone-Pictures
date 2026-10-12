@@ -306,14 +306,8 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
               </select>
             </div>
             <div class="field">
-              <label for="insetZoom">Zoomed out</label>
-              <select id="insetZoom">
-                <option value="4">4× wider area</option>
-                <option value="8" selected>8× wider area</option>
-                <option value="16">16× wider area</option>
-                <option value="32">32× wider area</option>
-                <option value="64">64× wider area</option>
-              </select>
+              <label for="insetZoom">Zoomed out (× wider area)</label>
+              <input type="number" id="insetZoom" min="1.5" max="1000" step="any" value="8">
             </div>
           </div>
           <div class="row">
@@ -572,7 +566,7 @@ function readOpts() {
     otherNames: $("#otherNames").checked,
     showInset: $("#showInset").checked,
     insetCorner: $("#insetCorner").value,
-    insetZoom: parseInt($("#insetZoom").value, 10) || 8,
+    insetZoom: clamp(num($("#insetZoom"), 8), 1.5, 1000),
     insetSize: clamp(num($("#insetSize"), 30), 10, 60),
     insetFrame: $("#insetFrame").checked,
     insetDetail: parseInt($("#insetDetail").value, 10) || 0,
