@@ -25,8 +25,9 @@ Use the link above, or download `index.html` and open it in any browser.
 | Zone fills | Percentage of the page taken by the zone's longest side |
 | Base map | OpenStreetMap, Esri streets, Esri light grey, Esri satellite, or none. None need an API key |
 | Street label size | Uses a lower map zoom so street names print larger |
-| Zone style | Outline colour and width, tint, fade outside the zone, KML colours |
-| Extras | Neighbouring zones in grey, zone name and page number, scale bar |
+| Zone style | Outline colour, width and opacity, fill opacity, fade outside the zone, KML colours |
+| Neighbouring zones | On or off, with their own colour (or KML colours), outline width and opacity, fill opacity, dashed or solid, names on or off |
+| Extras | Zone name and page number, scale bar |
 | Page order | File order or natural name order (1, 2, 10) |
 
 Settings are remembered in your browser.

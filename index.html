@@ -273,13 +273,33 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
           <div class="field"><label for="lineMM">Outline width (mm)</label><input type="number" id="lineMM" min="0.1" max="5" step="0.1" value="0.8"></div>
         </div>
         <div class="row">
-          <div class="field"><label for="fillOpacity">Zone tint (%)</label><input type="number" id="fillOpacity" min="0" max="100" step="5" value="10"></div>
-          <div class="field"><label for="fade">Fade outside zone (%)</label><input type="number" id="fade" min="0" max="90" step="5" value="35"></div>
+          <div class="field"><label for="lineOpacity">Outline opacity (%)</label><input type="number" id="lineOpacity" min="0" max="100" step="5" value="100"></div>
+          <div class="field"><label for="fillOpacity">Fill opacity (%)</label><input type="number" id="fillOpacity" min="0" max="100" step="5" value="10"></div>
         </div>
+        <div class="field"><label for="fade">Fade the map outside the zone (%)</label><input type="number" id="fade" min="0" max="90" step="5" value="35"></div>
         <div class="checks">
-          <label class="check"><input type="checkbox" id="showOthers" checked>Show neighbouring zones in grey</label>
           <label class="check"><input type="checkbox" id="showTitle" checked>Print zone name and page number</label>
           <label class="check"><input type="checkbox" id="showScale" checked>Print scale bar</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Neighbouring zones</legend>
+        <label class="check"><input type="checkbox" id="showOthers" checked>Show neighbouring zones</label>
+        <div id="otherOpts" class="checks">
+          <div class="row">
+            <div class="field">
+              <label for="otherColor">Colour</label>
+              <div class="color-field"><input type="color" id="otherColor" value="#1f6fd1"><label class="check"><input type="checkbox" id="otherUseKml">KML colours</label></div>
+            </div>
+            <div class="field"><label for="otherLineMM">Outline width (mm)</label><input type="number" id="otherLineMM" min="0.1" max="5" step="0.1" value="0.5"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="otherLineOpacity">Outline opacity (%)</label><input type="number" id="otherLineOpacity" min="0" max="100" step="5" value="70"></div>
+            <div class="field"><label for="otherFillOpacity">Fill opacity (%)</label><input type="number" id="otherFillOpacity" min="0" max="100" step="5" value="0"></div>
+          </div>
+          <label class="check"><input type="checkbox" id="otherDashed" checked>Dashed outline</label>
+          <label class="check"><input type="checkbox" id="otherNames" checked>Show their names</label>
         </div>
       </fieldset>
 
@@ -484,15 +504,23 @@ function readOpts() {
     color: $("#color").value,
     useKml: $("#useKml").checked,
     lineMM: clamp(num($("#lineMM"), 0.8), 0.1, 5),
+    lineOpacity: clamp(num($("#lineOpacity"), 100), 0, 100) / 100,
     fillOpacity: clamp(num($("#fillOpacity"), 10), 0, 100) / 100,
     fade: clamp(num($("#fade"), 35), 0, 90) / 100,
     showOthers: $("#showOthers").checked,
+    otherColor: $("#otherColor").value,
+    otherUseKml: $("#otherUseKml").checked,
+    otherLineMM: clamp(num($("#otherLineMM"), 0.5), 0.1, 5),
+    otherLineOpacity: clamp(num($("#otherLineOpacity"), 70), 0, 100) / 100,
+    otherFillOpacity: clamp(num($("#otherFillOpacity"), 0), 0, 100) / 100,
+    otherDashed: $("#otherDashed").checked,
+    otherNames: $("#otherNames").checked,
     showTitle: $("#showTitle").checked,
     showScale: $("#showScale").checked,
     sortBy: $("#sortBy").value
   };
 }
-const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "fillOpacity", "fade", "showOthers", "showTitle", "showScale", "sortBy"];
+const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showTitle", "showScale", "sortBy"];
 function saveSettings() {
   try {
     const o = { orient: document.querySelector('input[name="orient"]:checked').value };
@@ -522,6 +550,7 @@ function orderedZones(o = readOpts()) {
   return list;
 }
 const zoneColor = (z, o) => (o.useKml && z.color) ? z.color : o.color;
+const otherColor = (z, o) => (o.otherUseKml && z.color) ? z.color : o.otherColor;
 
 /* ================= page layout maths ================= */
 function layout(zone, o, dpi) {
@@ -630,27 +659,30 @@ async function renderZone(zone, pos, total, o, dpi) {
   const mm = L.pxPerMM, lw = o.lineMM * mm;
   const col = zoneColor(zone, o);
 
-  // neighbouring zones
-  if (o.showOthers) {
-    const vx0 = L.ox / L.s, vx1 = (L.ox + L.pxW) / L.s, vy0 = L.oy / L.s, vy1 = (L.oy + L.pxH) / L.s;
-    ctx.save();
-    ctx.lineJoin = "round"; ctx.setLineDash([2.2 * mm, 1.4 * mm]);
-    for (const z of zones) {
-      if (z === zone || z.bb.maxX < vx0 || z.bb.minX > vx1 || z.bb.maxY < vy0 || z.bb.minY > vy1) continue;
-      ctx.beginPath(); tracePath(ctx, z, L);
-      ctx.strokeStyle = "rgba(60,66,74,0.75)"; ctx.lineWidth = Math.max(1, lw * 0.55); ctx.stroke();
-    }
-    ctx.restore();
-  }
-
   // fade everything outside the zone
   if (o.fade > 0) {
     ctx.beginPath(); ctx.rect(0, 0, L.pxW, L.pxH); tracePath(ctx, zone, L);
     ctx.fillStyle = `rgba(255,255,255,${o.fade})`; ctx.fill("evenodd");
   }
 
-  // neighbour names (after fade so they stay readable)
+  // neighbouring zones (after the fade so their opacity is exactly what's set)
   if (o.showOthers) {
+    const vx0 = L.ox / L.s, vx1 = (L.ox + L.pxW) / L.s, vy0 = L.oy / L.s, vy1 = (L.oy + L.pxH) / L.s;
+    ctx.save();
+    ctx.lineJoin = "round";
+    if (o.otherDashed) ctx.setLineDash([2.2 * mm, 1.4 * mm]);
+    for (const z of zones) {
+      if (z === zone || z.bb.maxX < vx0 || z.bb.minX > vx1 || z.bb.maxY < vy0 || z.bb.minY > vy1) continue;
+      const c = otherColor(z, o);
+      ctx.beginPath(); tracePath(ctx, z, L);
+      if (o.otherFillOpacity > 0) { ctx.fillStyle = hexToRgba(c, o.otherFillOpacity); ctx.fill("evenodd"); }
+      if (o.otherLineOpacity > 0) { ctx.strokeStyle = hexToRgba(c, o.otherLineOpacity); ctx.lineWidth = Math.max(1, o.otherLineMM * mm); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+
+  // neighbour names
+  if (o.showOthers && o.otherNames) {
     ctx.save();
     ctx.font = `500 ${3 * mm}px "IBM Plex Sans", system-ui, sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -668,8 +700,10 @@ async function renderZone(zone, pos, total, o, dpi) {
   ctx.beginPath(); tracePath(ctx, zone, L);
   if (o.fillOpacity > 0) { ctx.fillStyle = hexToRgba(col, o.fillOpacity); ctx.fill("evenodd"); }
   ctx.lineJoin = "round"; ctx.lineCap = "round";
-  ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = lw + 0.8 * mm; ctx.stroke();
-  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke();
+  if (o.lineOpacity > 0) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.85 * o.lineOpacity})`; ctx.lineWidth = lw + 0.8 * mm; ctx.stroke();
+    ctx.strokeStyle = hexToRgba(col, o.lineOpacity); ctx.lineWidth = lw; ctx.stroke();
+  }
 
   const m = 5 * mm;
   if (o.showTitle) {
@@ -926,7 +960,8 @@ for (const el of document.querySelectorAll(".panel input, .panel select")) {
   if (el.id === "fileInput" || el.id === "fill" || el.id === "fillNum" || el.id.startsWith("inc_")) continue;
   el.addEventListener(el.type === "number" ? "input" : "change", onOpt);
 }
-function onOpt() { saveSettings(); drawZonesOnMap(); schedulePreview(); }
+function onOpt() { $("#otherOpts").hidden = !$("#showOthers").checked; saveSettings(); drawZonesOnMap(); schedulePreview(); }
+$("#otherOpts").hidden = !$("#showOthers").checked;
 $("#allOn").addEventListener("click", () => { zones.forEach((z) => (z.include = true)); renderList(); drawZonesOnMap(); schedulePreview(); });
 $("#allOff").addEventListener("click", () => { zones.forEach((z) => (z.include = false)); renderList(); drawZonesOnMap(); schedulePreview(); });
 $("#exportPdf").addEventListener("click", () => exportAll("pdf"));
