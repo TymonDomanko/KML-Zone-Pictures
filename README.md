@@ -27,7 +27,7 @@ Use the link above, or download `index.html` and open it in any browser.
 | Street label size | Prints street names larger or smaller. Vector maps stay sharp at every size; image tiles blur when enlarged |
 | Zone style | Outline colour, width and opacity, fill opacity, fade outside the zone, KML colours |
 | Neighbouring zones | On or off, with their own colour (or KML colours), outline width and opacity, fill opacity, dashed or solid, names on or off |
-| Summary page | Optional first page (A3 by default, up to A0) showing every selected zone with its name on top. Own size, orientation, fill and name size |
+| Summary page | Optional first page (A3 by default, up to A0) showing every selected zone with its name on top. Names never overlap: they shift within the zone, shrink, or move outside with a leader line. Own size, orientation, fill and name size |
 | Locator minimap | Zoomed-out map (type any multiplier, e.g. 8× wider) centred on the zone, showing the page's area, with adjustable street detail. Auto picks the corner that covers the least of the zone, or choose a corner |
 | Extras | Zone name and page number, scale bar |
 | Page order | File order or natural name order (1, 2, 10) |
