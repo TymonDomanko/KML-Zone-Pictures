@@ -291,6 +291,37 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
       </fieldset>
 
       <fieldset>
+        <legend>Locator minimap</legend>
+        <label class="check"><input type="checkbox" id="showInset">Add a zoomed-out minimap in a corner</label>
+        <div id="insetOpts" class="checks">
+          <div class="row">
+            <div class="field">
+              <label for="insetCorner">Corner</label>
+              <select id="insetCorner">
+                <option value="auto" selected>Auto (covers least of zone)</option>
+                <option value="tl">Top left</option>
+                <option value="tr">Top right</option>
+                <option value="bl">Bottom left</option>
+                <option value="br">Bottom right</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="insetZoom">Zoomed out</label>
+              <select id="insetZoom">
+                <option value="4">4× wider area</option>
+                <option value="8" selected>8× wider area</option>
+                <option value="16">16× wider area</option>
+                <option value="32">32× wider area</option>
+                <option value="64">64× wider area</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label for="insetSize">Minimap size (% of page's short side)</label><input type="number" id="insetSize" min="10" max="60" step="5" value="30"></div>
+          <label class="check"><input type="checkbox" id="insetFrame" checked>Show the page's area on the minimap</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>Neighbouring zones</legend>
         <label class="check"><input type="checkbox" id="showOthers" checked>Show neighbouring zones</label>
         <div id="otherOpts" class="checks">
@@ -527,12 +558,17 @@ function readOpts() {
     otherFillOpacity: clamp(num($("#otherFillOpacity"), 0), 0, 100) / 100,
     otherDashed: $("#otherDashed").checked,
     otherNames: $("#otherNames").checked,
+    showInset: $("#showInset").checked,
+    insetCorner: $("#insetCorner").value,
+    insetZoom: parseInt($("#insetZoom").value, 10) || 8,
+    insetSize: clamp(num($("#insetSize"), 30), 10, 60),
+    insetFrame: $("#insetFrame").checked,
     showTitle: $("#showTitle").checked,
     showScale: $("#showScale").checked,
     sortBy: $("#sortBy").value
   };
 }
-const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showTitle", "showScale", "sortBy"];
+const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "showTitle", "showScale", "sortBy"];
 function saveSettings() {
   try {
     const o = { orient: document.querySelector('input[name="orient"]:checked').value };
@@ -727,6 +763,103 @@ function labelBox(ctx, text, x, y, mm, opts = {}) {
   return { bw, bh };
 }
 
+function drawBase(ctx, L_, o) {
+  return BASEMAPS[o.basemap].vector ? drawVector(ctx, L_, o) : drawTiles(ctx, L_, o.basemap);
+}
+
+/* ---------- locator minimap ---------- */
+function insetLayout(zone, L_, o) {
+  const side = Math.round(Math.min(L_.pxW, L_.pxH) * o.insetSize / 100);
+  // the minimap shows an area insetZoom times wider than the main page
+  const s2 = side * L_.s / (o.insetZoom * L_.pxW);
+  const cx = (zone.bb.minX + zone.bb.maxX) / 2, cy = (zone.bb.minY + zone.bb.maxY) / 2;
+  const zt = clamp(Math.round(Math.log2(s2) - Math.log2(L_.dpi / 96)) + o.textShift, 0, BASEMAPS[o.basemap].max);
+  return { pxW: side, pxH: side, s: s2, ox: cx * s2 - side / 2, oy: cy * s2 - side / 2, dpi: L_.dpi, zt, pxPerMM: L_.pxPerMM };
+}
+function insetCandidates(L_, o, w, h) {
+  const mm = L_.pxPerMM, m = 5 * mm, gap = 2.5 * mm;
+  const top = o.showTitle ? m + 8.5 * mm + gap : m;                     // below zone name / page number
+  const bl = o.showScale ? m + 9.5 * mm + gap : m;                       // above scale bar
+  const br = BASEMAPS[o.basemap].attr ? Math.max(m, 4.2 * mm + gap) : m; // above map credit
+  return {
+    br: [L_.pxW - m - w, L_.pxH - br - h],
+    tr: [L_.pxW - m - w, top],
+    bl: [m, L_.pxH - bl - h],
+    tl: [m, top]
+  };
+}
+function placeInset(zone, L_, o, w, h) {
+  const cands = insetCandidates(L_, o, w, h);
+  if (o.insetCorner !== "auto" && cands[o.insetCorner]) return cands[o.insetCorner];
+  // draw the zone (fill + outline) onto a small mask and count how much of it each corner would hide
+  const k = 300 / Math.max(L_.pxW, L_.pxH);
+  const mw = Math.ceil(L_.pxW * k), mh = Math.ceil(L_.pxH * k);
+  const mc = document.createElement("canvas"); mc.width = mw; mc.height = mh;
+  const mx = mc.getContext("2d");
+  mx.scale(k, k);
+  mx.beginPath(); tracePath(mx, zone, L_);
+  mx.fillStyle = "#000"; mx.fill("evenodd");
+  mx.lineWidth = Math.max(o.lineMM * L_.pxPerMM, 1 / k) * 2; mx.strokeStyle = "#000"; mx.stroke();
+  const data = mx.getImageData(0, 0, mw, mh).data;
+  let best = null, bestScore = Infinity;
+  for (const key of ["br", "tr", "bl", "tl"]) { // ties go to the earlier corner
+    const [x, y] = cands[key];
+    const x0 = clamp(Math.floor(x * k), 0, mw), x1 = clamp(Math.ceil((x + w) * k), 0, mw);
+    const y0 = clamp(Math.floor(y * k), 0, mh), y1 = clamp(Math.ceil((y + h) * k), 0, mh);
+    let score = 0;
+    for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) if (data[(yy * mw + xx) * 4 + 3] > 0) score++;
+    if (score < bestScore) { bestScore = score; best = cands[key]; }
+  }
+  return best;
+}
+async function drawInset(ctx, zone, L_, o) {
+  const I = insetLayout(zone, L_, o);
+  const mm = L_.pxPerMM;
+  const c2 = document.createElement("canvas"); c2.width = I.pxW; c2.height = I.pxH;
+  const x2 = c2.getContext("2d");
+  x2.imageSmoothingQuality = "high";
+  x2.fillStyle = o.basemap === "none" ? "#ffffff" : "#eceeea"; x2.fillRect(0, 0, I.pxW, I.pxH);
+  const failed = await drawBase(x2, I, o);
+  x2.lineJoin = "round";
+  if (o.showOthers) {
+    for (const z of zones) {
+      if (z === zone) continue;
+      x2.beginPath(); tracePath(x2, z, I);
+      x2.strokeStyle = hexToRgba(otherColor(z, o), Math.max(0.35, o.otherLineOpacity * 0.8));
+      x2.lineWidth = Math.max(1, 0.25 * mm); x2.stroke();
+    }
+  }
+  const col = zoneColor(zone, o);
+  x2.beginPath(); tracePath(x2, zone, I);
+  x2.fillStyle = hexToRgba(col, 0.4); x2.fill("evenodd");
+  x2.strokeStyle = col; x2.lineWidth = Math.max(1, 0.45 * mm); x2.stroke();
+  // if the zone is tiny at this zoom, ring it so it's still easy to find
+  const zw = (zone.bb.maxX - zone.bb.minX) * I.s, zh = (zone.bb.maxY - zone.bb.minY) * I.s;
+  if (Math.max(zw, zh) < 4 * mm) {
+    x2.beginPath(); x2.arc(I.pxW / 2, I.pxH / 2, 3 * mm, 0, Math.PI * 2);
+    x2.strokeStyle = col; x2.lineWidth = Math.max(1, 0.5 * mm); x2.stroke();
+  }
+  if (o.insetFrame) {
+    const fx = L_.ox / L_.s * I.s - I.ox, fy = L_.oy / L_.s * I.s - I.oy;
+    const fw = L_.pxW / L_.s * I.s, fh = L_.pxH / L_.s * I.s;
+    x2.setLineDash([1.2 * mm, 0.8 * mm]);
+    x2.strokeStyle = "rgba(26,31,38,0.85)"; x2.lineWidth = Math.max(1, 0.3 * mm);
+    x2.strokeRect(fx, fy, fw, fh);
+    x2.setLineDash([]);
+  }
+
+  const [x, y] = placeInset(zone, L_, o, I.pxW, I.pxH);
+  const pad = 0.8 * mm;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.25)"; ctx.shadowBlur = 1.5 * mm; ctx.shadowOffsetY = 0.3 * mm;
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(x - pad, y - pad, I.pxW + pad * 2, I.pxH + pad * 2);
+  ctx.restore();
+  ctx.drawImage(c2, x, y);
+  ctx.strokeStyle = "rgba(26,31,38,0.6)"; ctx.lineWidth = Math.max(1, 0.2 * mm); ctx.setLineDash([]);
+  ctx.strokeRect(x, y, I.pxW, I.pxH);
+  return failed;
+}
+
 async function renderZone(zone, pos, total, o, dpi) {
   const L = layout(zone, o, dpi);
   const c = document.createElement("canvas");
@@ -735,7 +868,7 @@ async function renderZone(zone, pos, total, o, dpi) {
   ctx.imageSmoothingQuality = "high";
   ctx.fillStyle = o.basemap === "none" ? "#ffffff" : "#eceeea";
   ctx.fillRect(0, 0, L.pxW, L.pxH);
-  const failed = BASEMAPS[o.basemap].vector ? await drawVector(ctx, L, o) : await drawTiles(ctx, L, o.basemap);
+  let failed = await drawBase(ctx, L, o);
   const mm = L.pxPerMM, lw = o.lineMM * mm;
   const col = zoneColor(zone, o);
 
@@ -784,6 +917,8 @@ async function renderZone(zone, pos, total, o, dpi) {
     ctx.strokeStyle = `rgba(255,255,255,${0.85 * o.lineOpacity})`; ctx.lineWidth = lw + 0.8 * mm; ctx.stroke();
     ctx.strokeStyle = hexToRgba(col, o.lineOpacity); ctx.lineWidth = lw; ctx.stroke();
   }
+
+  if (o.showInset) failed += await drawInset(ctx, zone, L, o);
 
   const m = 5 * mm;
   if (o.showTitle) {
@@ -1044,8 +1179,9 @@ for (const el of document.querySelectorAll(".panel input, .panel select")) {
   if (el.id === "fileInput" || el.id === "fill" || el.id === "fillNum" || el.id.startsWith("inc_")) continue;
   el.addEventListener(el.type === "number" ? "input" : "change", onOpt);
 }
-function onOpt() { $("#otherOpts").hidden = !$("#showOthers").checked; saveSettings(); drawZonesOnMap(); schedulePreview(); }
-$("#otherOpts").hidden = !$("#showOthers").checked;
+function syncSections() { $("#otherOpts").hidden = !$("#showOthers").checked; $("#insetOpts").hidden = !$("#showInset").checked; }
+function onOpt() { syncSections(); saveSettings(); drawZonesOnMap(); schedulePreview(); }
+syncSections();
 $("#allOn").addEventListener("click", () => { zones.forEach((z) => (z.include = true)); renderList(); drawZonesOnMap(); schedulePreview(); });
 $("#allOff").addEventListener("click", () => { zones.forEach((z) => (z.include = false)); renderList(); drawZonesOnMap(); schedulePreview(); });
 $("#exportPdf").addEventListener("click", () => exportAll("pdf"));
