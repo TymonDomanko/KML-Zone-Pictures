@@ -316,7 +316,19 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
               </select>
             </div>
           </div>
-          <div class="field"><label for="insetSize">Minimap size (% of page's short side)</label><input type="number" id="insetSize" min="10" max="60" step="5" value="30"></div>
+          <div class="row">
+            <div class="field"><label for="insetSize">Size (% of short side)</label><input type="number" id="insetSize" min="10" max="60" step="5" value="30"></div>
+            <div class="field">
+              <label for="insetDetail">Street detail</label>
+              <select id="insetDetail">
+                <option value="0">Normal</option>
+                <option value="1" selected>More streets</option>
+                <option value="2">Most streets</option>
+                <option value="3">Every street</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint">More detail shows smaller streets on the minimap, with smaller text.</p>
           <label class="check"><input type="checkbox" id="insetFrame" checked>Show the page's area on the minimap</label>
         </div>
       </fieldset>
@@ -563,12 +575,13 @@ function readOpts() {
     insetZoom: parseInt($("#insetZoom").value, 10) || 8,
     insetSize: clamp(num($("#insetSize"), 30), 10, 60),
     insetFrame: $("#insetFrame").checked,
+    insetDetail: parseInt($("#insetDetail").value, 10) || 0,
     showTitle: $("#showTitle").checked,
     showScale: $("#showScale").checked,
     sortBy: $("#sortBy").value
   };
 }
-const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "showTitle", "showScale", "sortBy"];
+const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showTitle", "showScale", "sortBy"];
 function saveSettings() {
   try {
     const o = { orient: document.querySelector('input[name="orient"]:checked').value };
@@ -691,7 +704,7 @@ async function renderVectorNow(ctx, L_, o) {
   if (typeof maplibregl === "undefined") throw new Error("The map drawing library didn't load. Check your connection and reload the page.");
   const bm = BASEMAPS[o.basemap];
   // pixel ratio sets how big text prints; shrink it only if the page is larger than the graphics card allows
-  let pr = (L_.dpi / 96) * labelScale(o);
+  let pr = (L_.dpi / 96) * labelScale(o) / 2 ** (L_.detail || 0);
   const cssW = Math.max(1, Math.round(L_.pxW / pr)), cssH = Math.max(1, Math.round(L_.pxH / pr));
   const lim = maxGLSize();
   let renderPr = pr;
@@ -773,8 +786,11 @@ function insetLayout(zone, L_, o) {
   // the minimap shows an area insetZoom times wider than the main page
   const s2 = side * L_.s / (o.insetZoom * L_.pxW);
   const cx = (zone.bb.minX + zone.bb.maxX) / 2, cy = (zone.bb.minY + zone.bb.maxY) / 2;
-  const zt = clamp(Math.round(Math.log2(s2) - Math.log2(L_.dpi / 96)) + o.textShift, 0, BASEMAPS[o.basemap].max);
-  return { pxW: side, pxH: side, s: s2, ox: cx * s2 - side / 2, oy: cy * s2 - side / 2, dpi: L_.dpi, zt, pxPerMM: L_.pxPerMM };
+  // detail: draw from this many zoom levels deeper, so minor streets that are hidden when zoomed out still appear
+  const detail = o.insetDetail || 0;
+  const tileDetail = Math.min(detail, 2); // image tiles: deeper than 2 levels means hundreds of tiny tiles per minimap
+  const zt = clamp(Math.round(Math.log2(s2) - Math.log2(L_.dpi / 96)) + o.textShift + tileDetail, 0, BASEMAPS[o.basemap].max);
+  return { pxW: side, pxH: side, s: s2, ox: cx * s2 - side / 2, oy: cy * s2 - side / 2, dpi: L_.dpi, zt, detail, pxPerMM: L_.pxPerMM };
 }
 function insetCandidates(L_, o, w, h) {
   const mm = L_.pxPerMM, m = 5 * mm, gap = 2.5 * mm;
