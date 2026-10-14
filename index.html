@@ -150,6 +150,9 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
 .namebox { position: relative; }
 .namebox input { padding-right: 84px; font-family: var(--mono); font-size: 13px; }
 .namebox span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font: 12px var(--mono); pointer-events: none; }
+.shuffle-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.shuffle-row .hint { margin: 0; flex: 1 1 160px; }
+.btn.small { height: 32px; font-size: 13px; }
 .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .btn { height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 600; padding: 0 12px; }
 .btn:hover { border-color: var(--ink); }
@@ -455,6 +458,21 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
                 </select>
               </div>
             </div>
+            <div class="row">
+              <div class="field">
+                <label for="sumColors">Zone colours</label>
+                <select id="sumColors">
+                  <option value="same">Same as zone outline</option>
+                  <option value="distinct" selected>Different per zone</option>
+                </select>
+              </div>
+              <div class="field"><label for="sumFillOpacity">Fill opacity (%)</label><input type="number" id="sumFillOpacity" min="0" max="100" step="5" value="25"></div>
+            </div>
+            <div class="shuffle-row" id="shuffleRow">
+              <button type="button" class="btn small" id="shuffleColors">Shuffle colours</button>
+              <span class="hint">Touching zones always get clearly different colours.</span>
+            </div>
+            <input type="hidden" id="sumSeed" value="1">
           </div>
         </div>
       </details>
@@ -676,6 +694,9 @@ function readOpts() {
     sumOrient: $("#sumOrient").value,
     sumFill: clamp(num($("#sumFill"), 90), 20, 100),
     sumLabel: parseFloat($("#sumLabel").value) || 0,
+    sumColors: $("#sumColors").value,
+    sumFillOpacity: clamp(num($("#sumFillOpacity"), 25), 0, 100) / 100,
+    sumSeed: parseInt($("#sumSeed").value, 10) || 1,
     insetDetail: parseInt($("#insetDetail").value, 10) || 0,
     showName: $("#showName").checked,
     showPageNum: $("#showPageNum").checked,
@@ -683,7 +704,7 @@ function readOpts() {
     sortBy: $("#sortBy").value
   };
 }
-const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showSummary", "sumSize", "sumOrient", "sumFill", "sumLabel", "showName", "showPageNum", "showScale", "sortBy"];
+const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showSummary", "sumSize", "sumOrient", "sumFill", "sumLabel", "sumColors", "sumFillOpacity", "sumSeed", "showName", "showPageNum", "showScale", "sortBy"];
 function saveSettings() {
   try {
     const o = { orient: document.querySelector('input[name="orient"]:checked').value };
@@ -1148,6 +1169,76 @@ function drawLabel(ctx, text, size, x, y, color, weight = 700) {
   ctx.restore();
 }
 
+/* ---------- distinct colours for the summary page ---------- */
+// Strong, print-friendly colours that are easy to tell apart (no pale yellows that vanish on white).
+const ZONE_PALETTE = ["#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#11a3c9", "#d81bb5", "#7fb800",
+  "#9a6324", "#469990", "#1b2a8f", "#808000", "#e6a100", "#555555"];
+function hexToLab(hex) {
+  const v = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  const X = (v[0] * 0.4124 + v[1] * 0.3576 + v[2] * 0.1805) / 0.95047;
+  const Y = v[0] * 0.2126 + v[1] * 0.7152 + v[2] * 0.0722;
+  const Z = (v[0] * 0.0193 + v[1] * 0.1192 + v[2] * 0.9505) / 1.08883;
+  const f = (t) => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+  return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+}
+const PALETTE_LAB = ZONE_PALETTE.map(hexToLab);
+const labDist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+function seededRandom(seed) {
+  let t = seed >>> 0;
+  return () => { t += 0x6D2B79F5; let r = Math.imul(t ^ (t >>> 15), 1 | t); r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; };
+}
+// Zones count as neighbours if their outlines touch or come within a small gap of each other.
+function segDist2(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+  let t = l ? ((px - ax) * dx + (py - ay) * dy) / l : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const ex = ax + t * dx - px, ey = ay + t * dy - py;
+  return ex * ex + ey * ey;
+}
+function ringsNear(A, B, tol) {
+  const t2 = tol * tol;
+  for (const ra of A) for (const rb of B) {
+    for (const [x, y] of ra) for (let i = 1; i < rb.length; i++) if (segDist2(x, y, rb[i - 1][0], rb[i - 1][1], rb[i][0], rb[i][1]) <= t2) return true;
+  }
+  return false;
+}
+function zonesTouch(a, b, tol) {
+  if (a.bb.maxX + tol < b.bb.minX || b.bb.maxX + tol < a.bb.minX || a.bb.maxY + tol < b.bb.minY || b.bb.maxY + tol < a.bb.minY) return false;
+  const outers = (z) => z.proj.map((rings) => rings[0]);
+  return ringsNear(outers(a), outers(b), tol) || ringsNear(outers(b), outers(a), tol);
+}
+let colourCache = { key: "", map: null };
+function distinctColours(list, seed) {
+  const key = seed + "|" + list.map((z) => z.id).join(",");
+  if (colourCache.key === key) return colourCache.map;
+  const sizes = list.map((z) => Math.max(z.bb.maxX - z.bb.minX, z.bb.maxY - z.bb.minY)).sort((a, b) => a - b);
+  const tol = (sizes[Math.floor(sizes.length / 2)] || 0) * 0.03; // 3% of a typical zone's size
+  const n = list.length, adj = list.map(() => []);
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (zonesTouch(list[i], list[j], tol)) { adj[i].push(j); adj[j].push(i); }
+  const rnd = seededRandom(seed * 2654435761);
+  const order = ZONE_PALETTE.map((_, i) => i).sort(() => rnd() - 0.5);
+  const pick = new Array(n).fill(-1), use = new Array(ZONE_PALETTE.length).fill(0);
+  // colour the most-connected zones first, always choosing the colour furthest from its coloured neighbours
+  const idx = list.map((_, i) => i).sort((a, b) => adj[b].length - adj[a].length || rnd() - 0.5);
+  for (const i of idx) {
+    let best = -1, bestScore = -Infinity;
+    for (const c of order) {
+      const near = adj[i].filter((j) => pick[j] >= 0).map((j) => labDist(PALETTE_LAB[c], PALETTE_LAB[pick[j]]));
+      const minD = near.length ? Math.min(...near) : 200;
+      // also keep colours spread across the page, and a pinch of randomness so Shuffle gives a new look
+      const score = Math.min(minD, 100) * 2 - use[c] * 3 + rnd() * 8;
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    pick[i] = best; use[best]++;
+  }
+  const map = new Map(list.map((z, i) => [z, ZONE_PALETTE[pick[i]]]));
+  colourCache = { key, map };
+  return map;
+}
+
 /* ---------- summary page ---------- */
 const SUMMARY_ID = "__summary";
 function summaryOpts(o) {
@@ -1216,17 +1307,25 @@ async function renderSummary(list, o0, dpi) {
     ctx.fillStyle = `rgba(255,255,255,${o.fade})`; ctx.fill("evenodd");
   }
   ctx.lineJoin = "round"; ctx.lineCap = "round";
+  const colours = o.sumColors === "distinct" ? distinctColours(list, o.sumSeed) : null;
+  const colOf = (z) => colours ? colours.get(z) : zoneColor(z, o);
   for (const z of list) {
-    const col = zoneColor(z, o);
     ctx.beginPath(); tracePath(ctx, z, L);
-    if (o.fillOpacity > 0) { ctx.fillStyle = hexToRgba(col, o.fillOpacity); ctx.fill("evenodd"); }
+    if (o.sumFillOpacity > 0) { ctx.fillStyle = hexToRgba(colOf(z), o.sumFillOpacity); ctx.fill("evenodd"); }
   }
   for (const z of list) {
     if (o.lineOpacity <= 0) break;
-    const col = zoneColor(z, o);
+    const col = colOf(z);
     ctx.beginPath(); tracePath(ctx, z, L);
-    ctx.strokeStyle = `rgba(255,255,255,${0.85 * o.lineOpacity})`; ctx.lineWidth = lw + 0.8 * mm; ctx.stroke();
-    ctx.strokeStyle = hexToRgba(col, o.lineOpacity); ctx.lineWidth = lw; ctx.stroke();
+    if (colours) {
+      // draw each outline just inside its own zone, so a shared border shows both zones' colours side by side
+      ctx.save(); ctx.clip("evenodd");
+      ctx.strokeStyle = hexToRgba(col, o.lineOpacity); ctx.lineWidth = lw * 2; ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = `rgba(255,255,255,${0.85 * o.lineOpacity})`; ctx.lineWidth = lw + 0.8 * mm; ctx.stroke();
+      ctx.strokeStyle = hexToRgba(col, o.lineOpacity); ctx.lineWidth = lw; ctx.stroke();
+    }
   }
 
   // zone names: each tries spots inside its zone, then smaller sizes, then just outside with a leader line
@@ -1602,6 +1701,7 @@ function updateSummaries() {
   const lab = [o.showName && "Name", o.showPageNum && "Page no.", o.showScale && "Scale bar"].filter(Boolean);
   $("#sum-labels").innerHTML = lab.length ? esc(lab.join(" · ")) : "None";
   $("#sum-inset").innerHTML = o.showInset ? `${esc(optText("insetCorner").replace(/ \(.*\)/, ""))} · ${fmt(o.insetZoom)}× · ${o.insetSize}%` : OFF;
+  $("#shuffleRow").hidden = o.sumColors !== "distinct";
   $("#sum-summary").innerHTML = o.showSummary
     ? `${o.sumSize === "same" ? "Same size" : o.sumSize} · ${o.sumOrient} · ${o.sumFill}%`
     : OFF;
@@ -1647,6 +1747,11 @@ $("#allOff").addEventListener("click", () => { zones.forEach((z) => (z.include =
 $("#exportPdf").addEventListener("click", () => exportAll("pdf"));
 $("#exportPng").addEventListener("click", () => exportAll("png"));
 $("#savePage").addEventListener("click", savePagePng);
+$("#shuffleColors").addEventListener("click", () => {
+  $("#sumSeed").value = 1 + Math.floor(Math.random() * 1e9);
+  onOpt();
+  if (selectedId !== SUMMARY_ID) selectZone(SUMMARY_ID, false); // show the result
+});
 $("#exportName").addEventListener("blur", updateSuffix); // an emptied box goes back to the input file name
 
 setBaseLayer();
