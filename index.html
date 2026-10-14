@@ -458,19 +458,11 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
                 </select>
               </div>
             </div>
-            <div class="row">
-              <div class="field">
-                <label for="sumColors">Zone colours</label>
-                <select id="sumColors">
-                  <option value="same">Same as zone outline</option>
-                  <option value="distinct" selected>Different per zone</option>
-                </select>
-              </div>
-              <div class="field"><label for="sumFillOpacity">Fill opacity (%)</label><input type="number" id="sumFillOpacity" min="0" max="100" step="5" value="25"></div>
-            </div>
+            <div class="field"><label for="sumFillOpacity">Fill opacity (%)</label><input type="number" id="sumFillOpacity" min="0" max="100" step="5" value="25"></div>
+            <p class="hint">Zones use their colours from the KML. Zones without one use the zone outline colour.</p>
+            <label class="check"><input type="checkbox" id="sumRecolour">Give each zone a new colour, with touching zones clearly different</label>
             <div class="shuffle-row" id="shuffleRow">
               <button type="button" class="btn small" id="shuffleColors">Shuffle colours</button>
-              <span class="hint">Touching zones always get clearly different colours.</span>
             </div>
             <input type="hidden" id="sumSeed" value="1">
           </div>
@@ -694,7 +686,7 @@ function readOpts() {
     sumOrient: $("#sumOrient").value,
     sumFill: clamp(num($("#sumFill"), 90), 20, 100),
     sumLabel: parseFloat($("#sumLabel").value) || 0,
-    sumColors: $("#sumColors").value,
+    sumColors: $("#sumRecolour").checked ? "distinct" : "kml",
     sumFillOpacity: clamp(num($("#sumFillOpacity"), 25), 0, 100) / 100,
     sumSeed: parseInt($("#sumSeed").value, 10) || 1,
     insetDetail: parseInt($("#insetDetail").value, 10) || 0,
@@ -704,7 +696,7 @@ function readOpts() {
     sortBy: $("#sortBy").value
   };
 }
-const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showSummary", "sumSize", "sumOrient", "sumFill", "sumLabel", "sumColors", "sumFillOpacity", "sumSeed", "showName", "showPageNum", "showScale", "sortBy"];
+const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showSummary", "sumSize", "sumOrient", "sumFill", "sumLabel", "sumRecolour", "sumFillOpacity", "sumSeed", "showName", "showPageNum", "showScale", "sortBy"];
 function saveSettings() {
   try {
     const o = { orient: document.querySelector('input[name="orient"]:checked').value };
@@ -1308,7 +1300,9 @@ async function renderSummary(list, o0, dpi) {
   }
   ctx.lineJoin = "round"; ctx.lineCap = "round";
   const colours = o.sumColors === "distinct" ? distinctColours(list, o.sumSeed) : null;
-  const colOf = (z) => colours ? colours.get(z) : zoneColor(z, o);
+  // default: the KML's own colour for each zone, falling back to the zone outline colour
+  const colOf = (z) => colours ? colours.get(z) : (z.color || o.color);
+  const perZone = !!colours || list.some((z) => z.color && z.color !== o.color);
   for (const z of list) {
     ctx.beginPath(); tracePath(ctx, z, L);
     if (o.sumFillOpacity > 0) { ctx.fillStyle = hexToRgba(colOf(z), o.sumFillOpacity); ctx.fill("evenodd"); }
@@ -1317,7 +1311,7 @@ async function renderSummary(list, o0, dpi) {
     if (o.lineOpacity <= 0) break;
     const col = colOf(z);
     ctx.beginPath(); tracePath(ctx, z, L);
-    if (colours) {
+    if (perZone) {
       // draw each outline just inside its own zone, so a shared border shows both zones' colours side by side
       ctx.save(); ctx.clip("evenodd");
       ctx.strokeStyle = hexToRgba(col, o.lineOpacity); ctx.lineWidth = lw * 2; ctx.stroke();

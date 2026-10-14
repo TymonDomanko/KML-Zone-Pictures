@@ -28,7 +28,7 @@ Use the link above, or download `index.html` and open it in any browser.
 | Fade | Fades the map outside the zone so it stands out |
 | Zone outline | Colour, width and opacity, fill opacity, KML colours |
 | Neighbouring zones | On or off, with their own colour (or KML colours), outline width and opacity, fill opacity, dashed or solid, names on or off |
-| Summary page | Optional first page (A3 by default, up to A0) showing every selected zone with its name on top. Names never overlap: they shift within the zone, shrink, or move outside with a leader line. Own size, orientation, fill and name size. Zones can each get their own colour, with touching zones always clearly different; Shuffle colours gives a new arrangement |
+| Summary page | Optional first page (A3 by default, up to A0) showing every selected zone with its name on top. Names never overlap: they shift within the zone, shrink, or move outside with a leader line. Own size, orientation, fill and name size. Zones keep their KML colours by default; tick the recolour box to give each zone a new colour, with touching zones always clearly different, and Shuffle for a new arrangement |
 | Locator minimap | Zoomed-out map (type any multiplier, e.g. 8× wider) centred on the zone, showing the page's area, with adjustable street detail. Auto picks the corner that covers the least of the zone, or choose a corner |
 | Page labels | Zone name, page number and scale bar, each on or off |
 | Export file name | Defaults to the input file's name; .pdf or .zip is added for you |
