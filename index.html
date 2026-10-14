@@ -147,6 +147,9 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
 .empty { padding: 16px; color: var(--muted); font-size: 13px; }
 
 .actions { padding: 14px 20px calc(16px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--paper); display: grid; gap: 10px; }
+.namebox { position: relative; }
+.namebox input { padding-right: 84px; font-family: var(--mono); font-size: 13px; }
+.namebox span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font: 12px var(--mono); pointer-events: none; }
 .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .btn { height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 600; padding: 0 12px; }
 .btn:hover { border-color: var(--ink); }
@@ -367,7 +370,8 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
       <details class="sec" data-sec="labels">
         <summary><span class="sec-t">Page labels</span><span class="sec-s" id="sum-labels"></span></summary>
         <div class="sec-b">
-          <label class="check"><input type="checkbox" id="showTitle" checked>Zone name and page number</label>
+          <label class="check"><input type="checkbox" id="showName" checked>Zone name (top left)</label>
+          <label class="check"><input type="checkbox" id="showPageNum" checked>Page number (top right)</label>
           <label class="check"><input type="checkbox" id="showScale" checked>Scale bar</label>
         </div>
       </details>
@@ -462,6 +466,10 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
     </div>
 
     <div class="actions">
+      <div class="field">
+        <label for="exportName">Export file name</label>
+        <div class="namebox"><input type="text" id="exportName" spellcheck="false" autocomplete="off"><span id="suffix">.pdf / .zip</span></div>
+      </div>
       <div class="btns">
         <button type="button" class="btn primary" id="exportPdf">Export PDF</button>
         <button type="button" class="btn" id="exportPng">Export PNGs (zip)</button>
@@ -669,12 +677,13 @@ function readOpts() {
     sumFill: clamp(num($("#sumFill"), 90), 20, 100),
     sumLabel: parseFloat($("#sumLabel").value) || 0,
     insetDetail: parseInt($("#insetDetail").value, 10) || 0,
-    showTitle: $("#showTitle").checked,
+    showName: $("#showName").checked,
+    showPageNum: $("#showPageNum").checked,
     showScale: $("#showScale").checked,
     sortBy: $("#sortBy").value
   };
 }
-const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showSummary", "sumSize", "sumOrient", "sumFill", "sumLabel", "showTitle", "showScale", "sortBy"];
+const SAVED_IDS = ["pageSize", "customW", "customH", "fillNum", "dpi", "basemap", "textSize", "color", "useKml", "lineMM", "lineOpacity", "fillOpacity", "fade", "showOthers", "otherColor", "otherUseKml", "otherLineMM", "otherLineOpacity", "otherFillOpacity", "otherDashed", "otherNames", "showInset", "insetCorner", "insetZoom", "insetSize", "insetFrame", "insetDetail", "showSummary", "sumSize", "sumOrient", "sumFill", "sumLabel", "showName", "showPageNum", "showScale", "sortBy"];
 function saveSettings() {
   try {
     const o = { orient: document.querySelector('input[name="orient"]:checked').value };
@@ -692,6 +701,7 @@ function loadSettings() {
       if (el.type === "checkbox") el.checked = !!o[id]; else el.value = o[id];
     }
     if (!BASEMAPS[$("#basemap").value]) $("#basemap").value = "osm"; // saved setting from a removed map source
+    if ("showTitle" in o && !("showName" in o)) $("#showName").checked = $("#showPageNum").checked = !!o.showTitle;
     $("#fill").value = $("#fillNum").value;
     const r = document.querySelector(`input[name="orient"][value="${o.orient}"]`); if (r) r.checked = true;
   } catch (e) { /* ignore */ }
@@ -887,14 +897,15 @@ function insetLayout(zone, L_, o) {
 }
 function insetCandidates(L_, o, w, h) {
   const mm = L_.pxPerMM, m = 5 * mm, gap = 2.5 * mm;
-  const top = o.showTitle ? m + 8.5 * mm + gap : m;                     // below zone name / page number
+  const topL = o.showName ? m + 8.5 * mm + gap : m;                     // below zone name
+  const topR = o.showPageNum ? m + 7 * mm + gap : m;                    // below page number
   const bl = o.showScale ? m + 9.5 * mm + gap : m;                       // above scale bar
   const br = BASEMAPS[o.basemap].attr ? Math.max(m, 4.2 * mm + gap) : m; // above map credit
   return {
     br: [L_.pxW - m - w, L_.pxH - br - h],
-    tr: [L_.pxW - m - w, top],
+    tr: [L_.pxW - m - w, topR],
     bl: [m, L_.pxH - bl - h],
-    tl: [m, top]
+    tl: [m, topL]
   };
 }
 function placeInset(zone, L_, o, w, h) {
@@ -1034,7 +1045,7 @@ async function renderZone(zone, pos, total, o, dpi) {
 
   // neighbour names: placed inside each neighbour, skipped if there's no free spot on the page
   if (o.showOthers && o.otherNames) {
-    const placer = makePlacer(L.pxW, L.pxH, furnitureRects(ctx, L, o, o.showTitle ? zone.name : null, total ? `${pos} / ${total}` : null));
+    const placer = makePlacer(L.pxW, L.pxH, furnitureRects(ctx, L, o, zone.name, total ? `${pos} / ${total}` : null));
     const size = 3 * mm;
     const vx0 = L.ox / L.s, vx1 = (L.ox + L.pxW) / L.s, vy0 = L.oy / L.s, vy1 = (L.oy + L.pxH) / L.s;
     for (const z of zones) {
@@ -1058,9 +1069,9 @@ async function renderZone(zone, pos, total, o, dpi) {
   if (o.showInset) failed += await drawInset(ctx, zone, L, o);
 
   const m = 5 * mm;
-  if (o.showTitle) {
-    labelBox(ctx, zone.name, m, m, mm, { size: 4.6 });
-    if (total) labelBox(ctx, `${pos} / ${total}`, L.pxW - m, m, mm, { size: 3.4, weight: 500, align: "right", color: "#5b646e" });
+  {
+    if (o.showName) labelBox(ctx, zone.name, m, m, mm, { size: 4.6 });
+    if (o.showPageNum && total) labelBox(ctx, `${pos} / ${total}`, L.pxW - m, m, mm, { size: 3.4, weight: 500, align: "right", color: "#5b646e" });
   }
   drawFurniture(ctx, L, o);
   return { canvas: c, L, failed };
@@ -1085,8 +1096,8 @@ function furnitureRects(ctx, L, o, titleText, pageText) {
     const pad = 1.6 * mm;
     return { w: ctx.measureText(text).width + pad * 2, h: size * mm * 1.35 + pad * 1.2 };
   };
-  if (o.showTitle && titleText) { const b = box(titleText, 4.6, 600); out.push({ x: m, y: m, w: b.w, h: b.h }); }
-  if (o.showTitle && pageText) { const b = box(pageText, 3.4, 500); out.push({ x: L.pxW - m - b.w, y: m, w: b.w, h: b.h }); }
+  if (o.showName && titleText) { const b = box(titleText, 4.6, 600); out.push({ x: m, y: m, w: b.w, h: b.h }); }
+  if (o.showPageNum && pageText) { const b = box(pageText, 3.4, 500); out.push({ x: L.pxW - m - b.w, y: m, w: b.w, h: b.h }); }
   if (o.showScale) out.push({ x: m, y: L.pxH - m - 9.5 * mm, w: L.pxW * 0.2 + 22 * mm, h: 9.5 * mm });
   const attr = BASEMAPS[o.basemap].attr;
   if (attr) {
@@ -1219,7 +1230,7 @@ async function renderSummary(list, o0, dpi) {
   }
 
   // zone names: each tries spots inside its zone, then smaller sizes, then just outside with a leader line
-  const titleText = `${sourceName === "sample" ? "Sample zones" : baseName()} · ${list.length} zone${list.length === 1 ? "" : "s"}`;
+  const titleText = `${exportBase()} · ${list.length} zone${list.length === 1 ? "" : "s"}`;
   const placer = makePlacer(L.pxW, L.pxH, furnitureRects(ctx, L, o, titleText, null));
   const minSize = 1.8 * mm;
   const items = list.map((z) => {
@@ -1280,7 +1291,7 @@ async function renderSummary(list, o0, dpi) {
   }
   for (const p of placed) drawLabel(ctx, p.it.z.name, p.size, p.x, p.y, "#1a1f26");
 
-  if (o.showTitle) labelBox(ctx, titleText, 5 * mm, 5 * mm, mm, { size: 4.6 });
+  if (o.showName) labelBox(ctx, titleText, 5 * mm, 5 * mm, mm, { size: 4.6 });
   drawFurniture(ctx, L, o);
   return { canvas: c, L, failed };
 }
@@ -1445,7 +1456,13 @@ function saveBlob(blob, name) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
 }
 const canvasBlob = (c, type, q) => new Promise((res) => c.toBlob(res, type, q));
-const baseName = () => safeName(sourceName.replace(/\.(kml|kmz)$/i, ""));
+const baseName = () => sourceName === "sample" ? "Sample zones" : safeName(sourceName.replace(/\.(kml|kmz)$/i, ""));
+// the name typed in the export box, without any .pdf/.zip/.png the user added; falls back to the input file name
+const exportBase = () => safeName(($("#exportName").value || "").trim().replace(/\.(pdf|zip|png)$/i, "")) || baseName();
+function updateSuffix() {
+  const box = $("#exportName");
+  if (!box.value.trim()) box.value = baseName();
+}
 
 async function exportAll(kind) {
   if (exporting) return;
@@ -1476,10 +1493,10 @@ async function exportAll(kind) {
     }
     setProgress(1, "Saving file…");
     if (kind === "pdf") {
-      pdf.setProperties({ title: `${baseName()} zones` });
-      pdf.save(`${baseName()} zones.pdf`);
+      pdf.setProperties({ title: exportBase() });
+      pdf.save(`${exportBase()}.pdf`);
     } else {
-      saveBlob(await zip.generateAsync({ type: "blob" }), `${baseName()} zones.zip`);
+      saveBlob(await zip.generateAsync({ type: "blob" }), `${exportBase()}.zip`);
     }
     setProgress(1, `Exported ${list.length} zone page${list.length === 1 ? "" : "s"}${o.showSummary ? " plus the summary page" : ""}.`);
     if (failed) toast(`${failed} map tiles didn't load, so parts of some pages are blank grey. Check your connection and export again.`, true);
@@ -1516,6 +1533,7 @@ async function savePagePng() {
 /* ================= loading files ================= */
 function loadZones(list, name) {
   zones = list; sourceName = name;
+  $("#exportName").value = baseName();
   selectedId = orderedZones()[0] ? orderedZones()[0].id : null;
   for (const k in polyById) delete polyById[k];
   drawZonesOnMap(); renderList(); fitAll(); schedulePreview();
@@ -1581,7 +1599,7 @@ function updateSummaries() {
   $("#sum-others").innerHTML = o.showOthers
     ? `${o.otherUseKml ? "KML colours · " : swatch(o.otherColor)}${o.otherDashed ? "Dashed" : "Solid"} · ${Math.round(o.otherLineOpacity * 100)}%${o.otherNames ? " · names" : ""}`
     : OFF;
-  const lab = [o.showTitle && "Name & page no.", o.showScale && "Scale bar"].filter(Boolean);
+  const lab = [o.showName && "Name", o.showPageNum && "Page no.", o.showScale && "Scale bar"].filter(Boolean);
   $("#sum-labels").innerHTML = lab.length ? esc(lab.join(" · ")) : "None";
   $("#sum-inset").innerHTML = o.showInset ? `${esc(optText("insetCorner").replace(/ \(.*\)/, ""))} · ${fmt(o.insetZoom)}× · ${o.insetSize}%` : OFF;
   $("#sum-summary").innerHTML = o.showSummary
@@ -1629,6 +1647,7 @@ $("#allOff").addEventListener("click", () => { zones.forEach((z) => (z.include =
 $("#exportPdf").addEventListener("click", () => exportAll("pdf"));
 $("#exportPng").addEventListener("click", () => exportAll("png"));
 $("#savePage").addEventListener("click", savePagePng);
+$("#exportName").addEventListener("blur", updateSuffix); // an emptied box goes back to the input file name
 
 setBaseLayer();
 (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {

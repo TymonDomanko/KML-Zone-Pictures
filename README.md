@@ -25,11 +25,13 @@ Use the link above, or download `index.html` and open it in any browser.
 | Zone fills | Percentage of the page taken by the zone's longest side |
 | Base map | Sharp vector maps from OpenFreeMap (streets, bright streets, light grey), or image tiles from OpenStreetMap and Esri (streets, light grey, satellite), or none. None need an API key |
 | Street label size | Prints street names larger or smaller. Vector maps stay sharp at every size; image tiles blur when enlarged |
-| Zone style | Outline colour, width and opacity, fill opacity, fade outside the zone, KML colours |
+| Fade | Fades the map outside the zone so it stands out |
+| Zone outline | Colour, width and opacity, fill opacity, KML colours |
 | Neighbouring zones | On or off, with their own colour (or KML colours), outline width and opacity, fill opacity, dashed or solid, names on or off |
 | Summary page | Optional first page (A3 by default, up to A0) showing every selected zone with its name on top. Names never overlap: they shift within the zone, shrink, or move outside with a leader line. Own size, orientation, fill and name size |
 | Locator minimap | Zoomed-out map (type any multiplier, e.g. 8× wider) centred on the zone, showing the page's area, with adjustable street detail. Auto picks the corner that covers the least of the zone, or choose a corner |
-| Extras | Zone name and page number, scale bar |
+| Page labels | Zone name, page number and scale bar, each on or off |
+| Export file name | Defaults to the input file's name; .pdf or .zip is added for you |
 | Page order | File order or natural name order (1, 2, 10) |
 
 Settings are grouped into collapsible sections, in the order you'd work through them: zones, page, base map, zone outline, neighbouring zones, page labels, locator minimap, summary page. Collapsed sections show a one-line summary of their settings. Settings and open sections are remembered in your browser, and **Reset all settings** puts everything back to the defaults.
