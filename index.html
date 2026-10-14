@@ -45,6 +45,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.45 var(--body); }
 button, input, select { font: inherit; color: inherit; }
@@ -54,7 +55,9 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ---------- panel ---------- */
 .panel { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--paper); }
-.scroll { overflow-y: auto; padding: 20px 20px 8px; display: flex; flex-direction: column; gap: 22px; }
+.scroll { overflow-y: auto; padding: 20px 20px 8px; display: flex; flex-direction: column; gap: 0; }
+.scroll > .brand { margin-bottom: 16px; }
+.scroll > .drop { margin-bottom: 18px; }
 .brand h1 { font: 700 26px/1.05 var(--display); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
 .brand p { margin: 6px 0 0; color: var(--muted); max-width: 34ch; }
 
@@ -101,11 +104,37 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .color-field { display: flex; gap: 8px; align-items: center; }
 input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); cursor: pointer; }
 
+/* collapsible sections */
+.sec { border-top: 1px solid var(--line); }
+.sec:last-of-type { border-bottom: 1px solid var(--line); }
+.sec > summary {
+  list-style: none; cursor: pointer; display: grid; grid-template-columns: 14px auto minmax(0, 1fr); align-items: center; gap: 8px;
+  padding: 13px 2px; user-select: none;
+}
+.sec > summary::-webkit-details-marker { display: none; }
+.sec > summary::before {
+  content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg); transition: transform .15s; justify-self: center;
+}
+.sec[open] > summary::before { transform: rotate(45deg); margin-top: -3px; }
+.sec > summary:hover .sec-t { color: var(--accent); }
+.sec-t { font: 500 11.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .12em; color: var(--ink); white-space: nowrap; }
+.sec-s { font-size: 12.5px; color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sec-s .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .15); }
+.sec-s .off { color: var(--muted); opacity: .75; }
+.sec[open] > summary .sec-s { opacity: 0; }
+.sec-b { display: grid; gap: 12px; padding: 2px 2px 18px 2px; min-width: 0; }
+.sub { display: grid; gap: 12px; padding-left: 12px; border-left: 2px solid var(--line); }
+.foot { display: flex; justify-content: space-between; gap: 12px; padding: 4px 2px 8px; }
+.order { display: flex; align-items: center; gap: 8px; }
+.order label { font-size: 12.5px; color: var(--muted); }
+.order select { height: 30px; width: auto; }
+
 /* zone list */
 .zones-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .links { display: flex; gap: 10px; }
 .linkbtn { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 12.5px; font-weight: 500; }
-.zone-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); overflow: hidden; }
+.zone-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); max-height: 300px; overflow-y: auto; }
 .zone-list li { display: grid; grid-template-columns: 18px 30px minmax(0, 1fr); gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); cursor: pointer; }
 .zone-list li:first-child { border-top: 0; }
 .zone-list li:hover { background: var(--sunken); }
@@ -191,223 +220,245 @@ input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid
         <input type="file" id="fileInput" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz">
       </label>
 
-      <fieldset>
-        <legend>Page</legend>
-        <div class="row">
-          <div class="field">
-            <label for="pageSize">Page size</label>
-            <select id="pageSize">
-              <option value="A5">A5 · 148 × 210</option>
-              <option value="A4" selected>A4 · 210 × 297</option>
-              <option value="A3">A3 · 297 × 420</option>
-              <option value="A2">A2 · 420 × 594</option>
-              <option value="Letter">Letter · 216 × 279</option>
-              <option value="Legal">Legal · 216 × 356</option>
-              <option value="Custom">Custom (mm)</option>
-            </select>
+      <details class="sec" data-sec="zones" open>
+        <summary><span class="sec-t">Zones</span><span class="sec-s" id="sum-zones"></span></summary>
+        <div class="sec-b">
+          <div class="zones-head">
+            <div class="links">
+              <button type="button" class="linkbtn" id="allOn">Select all</button>
+              <button type="button" class="linkbtn" id="allOff">Select none</button>
+            </div>
+            <div class="order">
+              <label for="sortBy">Order</label>
+              <select id="sortBy">
+                <option value="file">As in file</option>
+                <option value="name" selected>By name (1, 2, 10)</option>
+              </select>
+            </div>
           </div>
-          <div class="field">
-            <label for="dpi">Resolution</label>
-            <select id="dpi">
-              <option value="96">96 dpi · draft</option>
-              <option value="150" selected>150 dpi · print</option>
-              <option value="200">200 dpi</option>
-              <option value="300">300 dpi · sharp</option>
-            </select>
-          </div>
+          <ul class="zone-list" id="zoneList"></ul>
+          <p class="hint">Click a zone to preview its page. Untick zones to leave them out.</p>
         </div>
-        <div class="row" id="customRow" hidden>
-          <div class="field"><label for="customW">Width (mm)</label><input type="number" id="customW" min="50" max="2000" value="210"></div>
-          <div class="field"><label for="customH">Height (mm)</label><input type="number" id="customH" min="50" max="2000" value="297"></div>
-        </div>
-        <div class="field">
-          <span class="lbl" id="orientLbl">Orientation</span>
-          <div class="seg" role="radiogroup" aria-labelledby="orientLbl">
-            <input type="radio" name="orient" id="oAuto" value="auto" checked><label for="oAuto">Auto</label>
-            <input type="radio" name="orient" id="oPort" value="portrait"><label for="oPort">Portrait</label>
-            <input type="radio" name="orient" id="oLand" value="landscape"><label for="oLand">Landscape</label>
-          </div>
-        </div>
-        <div class="field">
-          <label for="fill">Zone fills this much of the page</label>
-          <div class="fill">
-            <input type="range" id="fill" min="20" max="100" step="1" value="80">
-            <div class="num"><input type="number" id="fillNum" min="20" max="100" value="80" aria-label="Fill percentage"><span>%</span></div>
-          </div>
-        </div>
-        <p class="hint">Measured on the zone's longest side relative to the page. Auto orientation picks whichever way gives the zone more room.</p>
-      </fieldset>
+      </details>
 
-      <fieldset>
-        <legend>Map</legend>
-        <div class="row">
-          <div class="field">
-            <label for="basemap">Base map</label>
-            <select id="basemap">
-              <optgroup label="Sharp at any label size">
-                <option value="vliberty" selected>Streets</option>
-                <option value="vbright">Bright streets</option>
-                <option value="vpositron">Light grey</option>
-              </optgroup>
-              <optgroup label="Image tiles (blur at large labels)">
-                <option value="osm">OpenStreetMap</option>
-                <option value="streets">Streets (Esri)</option>
-                <option value="light">Light grey (Esri)</option>
-                <option value="imagery">Satellite (Esri)</option>
-              </optgroup>
-              <option value="none">None (outline only)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="textSize">Street label size</label>
-            <select id="textSize">
-              <option value="1">Small</option>
-              <option value="0" selected>Normal</option>
-              <option value="-1">Large</option>
-              <option value="-2">Extra large</option>
-            </select>
-          </div>
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Zone style</legend>
-        <div class="row">
-          <div class="field">
-            <label for="color">Outline colour</label>
-            <div class="color-field"><input type="color" id="color" value="#e0262f"><label class="check"><input type="checkbox" id="useKml">Use KML colours</label></div>
-          </div>
-          <div class="field"><label for="lineMM">Outline width (mm)</label><input type="number" id="lineMM" min="0.1" max="5" step="0.1" value="0.8"></div>
-        </div>
-        <div class="row">
-          <div class="field"><label for="lineOpacity">Outline opacity (%)</label><input type="number" id="lineOpacity" min="0" max="100" step="5" value="100"></div>
-          <div class="field"><label for="fillOpacity">Fill opacity (%)</label><input type="number" id="fillOpacity" min="0" max="100" step="5" value="10"></div>
-        </div>
-        <div class="field"><label for="fade">Fade the map outside the zone (%)</label><input type="number" id="fade" min="0" max="90" step="5" value="35"></div>
-        <div class="checks">
-          <label class="check"><input type="checkbox" id="showTitle" checked>Print zone name and page number</label>
-          <label class="check"><input type="checkbox" id="showScale" checked>Print scale bar</label>
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Summary page</legend>
-        <label class="check"><input type="checkbox" id="showSummary" checked>Start with a summary page of all zones</label>
-        <div id="summaryOpts" class="checks">
+      <details class="sec" data-sec="page" open>
+        <summary><span class="sec-t">Page</span><span class="sec-s" id="sum-page"></span></summary>
+        <div class="sec-b">
           <div class="row">
             <div class="field">
-              <label for="sumSize">Page size</label>
-              <select id="sumSize">
-                <option value="same">Same as zone pages</option>
-                <option value="A4">A4 · 210 × 297</option>
-                <option value="A3" selected>A3 · 297 × 420</option>
+              <label for="pageSize">Page size</label>
+              <select id="pageSize">
+                <option value="A5">A5 · 148 × 210</option>
+                <option value="A4" selected>A4 · 210 × 297</option>
+                <option value="A3">A3 · 297 × 420</option>
                 <option value="A2">A2 · 420 × 594</option>
-                <option value="A1">A1 · 594 × 841</option>
-                <option value="A0">A0 · 841 × 1189</option>
                 <option value="Letter">Letter · 216 × 279</option>
                 <option value="Legal">Legal · 216 × 356</option>
+                <option value="Custom">Custom (mm)</option>
               </select>
             </div>
             <div class="field">
-              <label for="sumOrient">Orientation</label>
-              <select id="sumOrient">
-                <option value="auto" selected>Auto</option>
-                <option value="portrait">Portrait</option>
-                <option value="landscape">Landscape</option>
+              <label for="dpi">Resolution</label>
+              <select id="dpi">
+                <option value="96">96 dpi · draft</option>
+                <option value="150" selected>150 dpi · print</option>
+                <option value="200">200 dpi</option>
+                <option value="300">300 dpi · sharp</option>
               </select>
             </div>
           </div>
-          <div class="row">
-            <div class="field"><label for="sumFill">Zones fill (%)</label><input type="number" id="sumFill" min="20" max="100" step="1" value="90"></div>
-            <div class="field">
-              <label for="sumLabel">Name size</label>
-              <select id="sumLabel">
-                <option value="0" selected>Fit each zone</option>
-                <option value="3">Small (3 mm)</option>
-                <option value="5">Medium (5 mm)</option>
-                <option value="8">Large (8 mm)</option>
-                <option value="12">Extra large (12 mm)</option>
-              </select>
+          <div class="row" id="customRow" hidden>
+            <div class="field"><label for="customW">Width (mm)</label><input type="number" id="customW" min="50" max="2000" value="210"></div>
+            <div class="field"><label for="customH">Height (mm)</label><input type="number" id="customH" min="50" max="2000" value="297"></div>
+          </div>
+          <div class="field">
+            <span class="lbl" id="orientLbl">Orientation</span>
+            <div class="seg" role="radiogroup" aria-labelledby="orientLbl">
+              <input type="radio" name="orient" id="oAuto" value="auto" checked><label for="oAuto">Auto</label>
+              <input type="radio" name="orient" id="oPort" value="portrait"><label for="oPort">Portrait</label>
+              <input type="radio" name="orient" id="oLand" value="landscape"><label for="oLand">Landscape</label>
             </div>
           </div>
+          <div class="field">
+            <label for="fill">Zone fills this much of the page</label>
+            <div class="fill">
+              <input type="range" id="fill" min="20" max="100" step="1" value="80">
+              <div class="num"><input type="number" id="fillNum" min="20" max="100" value="80" aria-label="Fill percentage"><span>%</span></div>
+            </div>
+          </div>
+          <p class="hint">Measured on the zone's longest side. Auto orientation turns each page whichever way gives the zone more room.</p>
         </div>
-      </fieldset>
+      </details>
 
-      <fieldset>
-        <legend>Locator minimap</legend>
-        <label class="check"><input type="checkbox" id="showInset">Add a zoomed-out minimap in a corner</label>
-        <div id="insetOpts" class="checks">
+      <details class="sec" data-sec="map">
+        <summary><span class="sec-t">Base map</span><span class="sec-s" id="sum-map"></span></summary>
+        <div class="sec-b">
           <div class="row">
             <div class="field">
-              <label for="insetCorner">Corner</label>
-              <select id="insetCorner">
-                <option value="auto" selected>Auto (covers least of zone)</option>
-                <option value="tl">Top left</option>
-                <option value="tr">Top right</option>
-                <option value="bl">Bottom left</option>
-                <option value="br">Bottom right</option>
+              <label for="basemap">Map</label>
+              <select id="basemap">
+                <optgroup label="Sharp at any label size">
+                  <option value="vliberty" selected>Streets</option>
+                  <option value="vbright">Bright streets</option>
+                  <option value="vpositron">Light grey</option>
+                </optgroup>
+                <optgroup label="Image tiles (blur at large labels)">
+                  <option value="osm">OpenStreetMap</option>
+                  <option value="streets">Streets (Esri)</option>
+                  <option value="light">Light grey (Esri)</option>
+                  <option value="imagery">Satellite (Esri)</option>
+                </optgroup>
+                <option value="none">None (outline only)</option>
               </select>
             </div>
             <div class="field">
-              <label for="insetZoom">Zoomed out (× wider area)</label>
-              <input type="number" id="insetZoom" min="1.5" max="1000" step="any" value="8">
-            </div>
-          </div>
-          <div class="row">
-            <div class="field"><label for="insetSize">Size (% of short side)</label><input type="number" id="insetSize" min="10" max="60" step="5" value="30"></div>
-            <div class="field">
-              <label for="insetDetail">Street detail</label>
-              <select id="insetDetail">
-                <option value="0">Normal</option>
-                <option value="1" selected>More streets</option>
-                <option value="2">Most streets</option>
-                <option value="3">Every street</option>
+              <label for="textSize">Street label size</label>
+              <select id="textSize">
+                <option value="1">Small</option>
+                <option value="0" selected>Normal</option>
+                <option value="-1">Large</option>
+                <option value="-2">Extra large</option>
               </select>
             </div>
           </div>
-          <p class="hint">More detail shows smaller streets on the minimap, with smaller text.</p>
-          <label class="check"><input type="checkbox" id="insetFrame" checked>Show the page's area on the minimap</label>
+          <div class="field"><label for="fade">Fade the map outside the zone (%)</label><input type="number" id="fade" min="0" max="90" step="5" value="35"></div>
         </div>
-      </fieldset>
+      </details>
 
-      <fieldset>
-        <legend>Neighbouring zones</legend>
-        <label class="check"><input type="checkbox" id="showOthers" checked>Show neighbouring zones</label>
-        <div id="otherOpts" class="checks">
+      <details class="sec" data-sec="style">
+        <summary><span class="sec-t">Zone outline</span><span class="sec-s" id="sum-style"></span></summary>
+        <div class="sec-b">
           <div class="row">
             <div class="field">
-              <label for="otherColor">Colour</label>
-              <div class="color-field"><input type="color" id="otherColor" value="#1f6fd1"><label class="check"><input type="checkbox" id="otherUseKml">KML colours</label></div>
+              <label for="color">Colour</label>
+              <div class="color-field"><input type="color" id="color" value="#e0262f"><label class="check"><input type="checkbox" id="useKml">KML colours</label></div>
             </div>
-            <div class="field"><label for="otherLineMM">Outline width (mm)</label><input type="number" id="otherLineMM" min="0.1" max="5" step="0.1" value="0.5"></div>
+            <div class="field"><label for="lineMM">Width (mm)</label><input type="number" id="lineMM" min="0.1" max="5" step="0.1" value="0.8"></div>
           </div>
           <div class="row">
-            <div class="field"><label for="otherLineOpacity">Outline opacity (%)</label><input type="number" id="otherLineOpacity" min="0" max="100" step="5" value="70"></div>
-            <div class="field"><label for="otherFillOpacity">Fill opacity (%)</label><input type="number" id="otherFillOpacity" min="0" max="100" step="5" value="0"></div>
+            <div class="field"><label for="lineOpacity">Outline opacity (%)</label><input type="number" id="lineOpacity" min="0" max="100" step="5" value="100"></div>
+            <div class="field"><label for="fillOpacity">Fill opacity (%)</label><input type="number" id="fillOpacity" min="0" max="100" step="5" value="10"></div>
           </div>
-          <label class="check"><input type="checkbox" id="otherDashed" checked>Dashed outline</label>
-          <label class="check"><input type="checkbox" id="otherNames" checked>Show their names</label>
         </div>
-      </fieldset>
+      </details>
 
-      <fieldset>
-        <legend>Zones</legend>
-        <div class="zones-head">
-          <span id="zoneCount" class="status"></span>
-          <div class="links">
-            <button type="button" class="linkbtn" id="allOn">Select all</button>
-            <button type="button" class="linkbtn" id="allOff">Select none</button>
+      <details class="sec" data-sec="others">
+        <summary><span class="sec-t">Neighbouring zones</span><span class="sec-s" id="sum-others"></span></summary>
+        <div class="sec-b">
+          <label class="check"><input type="checkbox" id="showOthers" checked>Show neighbouring zones</label>
+          <div id="otherOpts" class="sub">
+            <div class="row">
+              <div class="field">
+                <label for="otherColor">Colour</label>
+                <div class="color-field"><input type="color" id="otherColor" value="#1f6fd1"><label class="check"><input type="checkbox" id="otherUseKml">KML colours</label></div>
+              </div>
+              <div class="field"><label for="otherLineMM">Width (mm)</label><input type="number" id="otherLineMM" min="0.1" max="5" step="0.1" value="0.5"></div>
+            </div>
+            <div class="row">
+              <div class="field"><label for="otherLineOpacity">Outline opacity (%)</label><input type="number" id="otherLineOpacity" min="0" max="100" step="5" value="70"></div>
+              <div class="field"><label for="otherFillOpacity">Fill opacity (%)</label><input type="number" id="otherFillOpacity" min="0" max="100" step="5" value="0"></div>
+            </div>
+            <label class="check"><input type="checkbox" id="otherDashed" checked>Dashed outline</label>
+            <label class="check"><input type="checkbox" id="otherNames" checked>Show their names</label>
           </div>
         </div>
-        <div class="field">
-          <label for="sortBy">Page order</label>
-          <select id="sortBy">
-            <option value="file">As in the file</option>
-            <option value="name" selected>By name (1, 2, 10…)</option>
-          </select>
+      </details>
+
+      <details class="sec" data-sec="labels">
+        <summary><span class="sec-t">Page labels</span><span class="sec-s" id="sum-labels"></span></summary>
+        <div class="sec-b">
+          <label class="check"><input type="checkbox" id="showTitle" checked>Zone name and page number</label>
+          <label class="check"><input type="checkbox" id="showScale" checked>Scale bar</label>
         </div>
-        <ul class="zone-list" id="zoneList"></ul>
-      </fieldset>
+      </details>
+
+      <details class="sec" data-sec="inset">
+        <summary><span class="sec-t">Locator minimap</span><span class="sec-s" id="sum-inset"></span></summary>
+        <div class="sec-b">
+          <label class="check"><input type="checkbox" id="showInset">Add a zoomed-out minimap in a corner</label>
+          <div id="insetOpts" class="sub">
+            <div class="row">
+              <div class="field">
+                <label for="insetCorner">Corner</label>
+                <select id="insetCorner">
+                  <option value="auto" selected>Auto (covers least)</option>
+                  <option value="tl">Top left</option>
+                  <option value="tr">Top right</option>
+                  <option value="bl">Bottom left</option>
+                  <option value="br">Bottom right</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="insetZoom">Zoomed out (×)</label>
+                <input type="number" id="insetZoom" min="1.5" max="1000" step="any" value="8">
+              </div>
+            </div>
+            <div class="row">
+              <div class="field"><label for="insetSize">Size (% of short side)</label><input type="number" id="insetSize" min="10" max="60" step="5" value="30"></div>
+              <div class="field">
+                <label for="insetDetail">Street detail</label>
+                <select id="insetDetail">
+                  <option value="0">Normal</option>
+                  <option value="1" selected>More streets</option>
+                  <option value="2">Most streets</option>
+                  <option value="3">Every street</option>
+                </select>
+              </div>
+            </div>
+            <label class="check"><input type="checkbox" id="insetFrame" checked>Outline the page's area on the minimap</label>
+          </div>
+        </div>
+      </details>
+
+      <details class="sec" data-sec="summary">
+        <summary><span class="sec-t">Summary page</span><span class="sec-s" id="sum-summary"></span></summary>
+        <div class="sec-b">
+          <label class="check"><input type="checkbox" id="showSummary" checked>Start with a summary page of all zones</label>
+          <div id="summaryOpts" class="sub">
+            <div class="row">
+              <div class="field">
+                <label for="sumSize">Page size</label>
+                <select id="sumSize">
+                  <option value="same">Same as zone pages</option>
+                  <option value="A4">A4 · 210 × 297</option>
+                  <option value="A3" selected>A3 · 297 × 420</option>
+                  <option value="A2">A2 · 420 × 594</option>
+                  <option value="A1">A1 · 594 × 841</option>
+                  <option value="A0">A0 · 841 × 1189</option>
+                  <option value="Letter">Letter · 216 × 279</option>
+                  <option value="Legal">Legal · 216 × 356</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="sumOrient">Orientation</label>
+                <select id="sumOrient">
+                  <option value="auto" selected>Auto</option>
+                  <option value="portrait">Portrait</option>
+                  <option value="landscape">Landscape</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field"><label for="sumFill">Zones fill (%)</label><input type="number" id="sumFill" min="20" max="100" step="1" value="90"></div>
+              <div class="field">
+                <label for="sumLabel">Name size</label>
+                <select id="sumLabel">
+                  <option value="0" selected>Fit each zone</option>
+                  <option value="3">Small (3 mm)</option>
+                  <option value="5">Medium (5 mm)</option>
+                  <option value="8">Large (8 mm)</option>
+                  <option value="12">Extra large (12 mm)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="foot">
+        <button type="button" class="linkbtn" id="resetAll">Reset all settings</button>
+        <button type="button" class="linkbtn" id="collapseAll">Collapse all</button>
+      </div>
     </div>
 
     <div class="actions">
@@ -1312,7 +1363,7 @@ function renderList() {
     ul.append(li);
   }
   const inc = zones.filter((z) => z.include).length;
-  $("#zoneCount").textContent = zones.length ? `${inc} of ${zones.length} zones selected` : "";
+  $("#sum-zones").textContent = zones.length ? `${inc} of ${zones.length} selected` : "";
   $("#exportPdf").disabled = $("#exportPng").disabled = !inc || exporting;
 }
 function selectZone(id, zoom) {
@@ -1486,6 +1537,9 @@ async function openFile(file) {
 }
 
 /* ================= wiring ================= */
+// capture the page's built-in defaults before saved settings are applied, for "Reset all settings"
+const DEFAULTS = {};
+for (const id of SAVED_IDS) { const el = $("#" + id); DEFAULTS[id] = el.type === "checkbox" ? el.checked : el.value; }
 loadSettings();
 $("#customRow").hidden = $("#pageSize").value !== "Custom";
 $("#fileInput").addEventListener("change", (e) => { openFile(e.target.files[0]); e.target.value = ""; });
@@ -1511,8 +1565,65 @@ function syncSections() {
   if (!$("#showSummary").checked && selectedId === SUMMARY_ID) { const f = orderedZones()[0]; selectedId = f ? f.id : null; }
   renderList();
 }
-function onOpt() { syncSections(); saveSettings(); drawZonesOnMap(); schedulePreview(); }
+function onOpt() { syncSections(); updateSummaries(); saveSettings(); drawZonesOnMap(); schedulePreview(); }
+
+/* one-line summaries shown on collapsed sections */
+const optText = (id) => { const el = $("#" + id); return el.options[el.selectedIndex].text; };
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const swatch = (c) => `<span class="sw" style="background:${esc(c)}"></span>`;
+const OFF = '<span class="off">Off</span>';
+function updateSummaries() {
+  const o = readOpts();
+  const orient = { auto: "auto", portrait: "portrait", landscape: "landscape" }[o.orient];
+  $("#sum-page").textContent = `${o.size === "Custom" ? `${fmt(o.page[0])} × ${fmt(o.page[1])} mm` : o.size} · ${orient} · ${o.fill}% · ${o.dpi} dpi`;
+  $("#sum-map").textContent = `${optText("basemap")} · ${optText("textSize").toLowerCase()} labels · fade ${Math.round(o.fade * 100)}%`;
+  $("#sum-style").innerHTML = `${o.useKml ? "KML colours · " : swatch(o.color)}${fmt(o.lineMM)} mm · fill ${Math.round(o.fillOpacity * 100)}%`;
+  $("#sum-others").innerHTML = o.showOthers
+    ? `${o.otherUseKml ? "KML colours · " : swatch(o.otherColor)}${o.otherDashed ? "Dashed" : "Solid"} · ${Math.round(o.otherLineOpacity * 100)}%${o.otherNames ? " · names" : ""}`
+    : OFF;
+  const lab = [o.showTitle && "Name & page no.", o.showScale && "Scale bar"].filter(Boolean);
+  $("#sum-labels").innerHTML = lab.length ? esc(lab.join(" · ")) : "None";
+  $("#sum-inset").innerHTML = o.showInset ? `${esc(optText("insetCorner").replace(/ \(.*\)/, ""))} · ${fmt(o.insetZoom)}× · ${o.insetSize}%` : OFF;
+  $("#sum-summary").innerHTML = o.showSummary
+    ? `${o.sumSize === "same" ? "Same size" : o.sumSize} · ${o.sumOrient} · ${o.sumFill}%`
+    : OFF;
+}
+
+/* remember which sections are open */
+const SEC_KEY = "kmlZonePictures.sections";
+try {
+  const saved = JSON.parse(localStorage.getItem(SEC_KEY) || "null");
+  if (saved) for (const d of document.querySelectorAll(".sec")) if (d.dataset.sec in saved) d.open = !!saved[d.dataset.sec];
+} catch (e) { /* storage unavailable */ }
+function saveSections() {
+  try {
+    const o = {}; for (const d of document.querySelectorAll(".sec")) o[d.dataset.sec] = d.open;
+    localStorage.setItem(SEC_KEY, JSON.stringify(o));
+  } catch (e) { /* storage unavailable */ }
+}
+for (const d of document.querySelectorAll(".sec")) d.addEventListener("toggle", saveSections);
+$("#collapseAll").addEventListener("click", () => { for (const d of document.querySelectorAll(".sec")) d.open = false; saveSections(); });
+
+/* reset: two clicks, so a stray click doesn't wipe everything */
+let resetArmed = null;
+$("#resetAll").addEventListener("click", () => {
+  const btn = $("#resetAll");
+  if (!resetArmed) {
+    btn.textContent = "Click again to reset";
+    resetArmed = setTimeout(() => { btn.textContent = "Reset all settings"; resetArmed = null; }, 3000);
+    return;
+  }
+  clearTimeout(resetArmed); resetArmed = null; btn.textContent = "Reset all settings";
+  for (const id of SAVED_IDS) { const el = $("#" + id); if (el.type === "checkbox") el.checked = DEFAULTS[id]; else el.value = DEFAULTS[id]; }
+  $("#oAuto").checked = true;
+  $("#fill").value = $("#fillNum").value;
+  $("#customRow").hidden = $("#pageSize").value !== "Custom";
+  setBaseLayer(); onOpt(); renderList();
+  toast("Settings reset to defaults.");
+});
+
 syncSections();
+updateSummaries();
 $("#allOn").addEventListener("click", () => { zones.forEach((z) => (z.include = true)); renderList(); drawZonesOnMap(); schedulePreview(); });
 $("#allOff").addEventListener("click", () => { zones.forEach((z) => (z.include = false)); renderList(); drawZonesOnMap(); schedulePreview(); });
 $("#exportPdf").addEventListener("click", () => exportAll("pdf"));

@@ -32,7 +32,7 @@ Use the link above, or download `index.html` and open it in any browser.
 | Extras | Zone name and page number, scale bar |
 | Page order | File order or natural name order (1, 2, 10) |
 
-Settings are remembered in your browser.
+Settings are grouped into collapsible sections, in the order you'd work through them: zones, page, base map, zone outline, neighbouring zones, page labels, locator minimap, summary page. Collapsed sections show a one-line summary of their settings. Settings and open sections are remembered in your browser, and **Reset all settings** puts everything back to the defaults.
 
 ## Notes
 
